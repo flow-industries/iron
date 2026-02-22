@@ -10,10 +10,10 @@ all:
         - { host: "flow.talk", upstream: "talk:3000", zone: "flow.talk" }
     game-1:
       ansible_host: game-1.flow.industries
-      stacks: [game]
+      stacks: [game-server, game-web]
       game_region: eu
-      game_port: 7000
+      game_port: 9999
       game_max_players: 100
       domains:
-        - { host: "flow.game", zone: "flow.game", proxied: false }
+        - { host: "flow.game", upstream: "game-web:80", zone: "flow.game" }
         - { host: "eu.play.flow.game", zone: "flow.game", proxied: false }

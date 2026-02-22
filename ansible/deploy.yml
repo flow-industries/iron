@@ -171,23 +171,41 @@
         state: present
       when: "'talk' in stacks"
 
-    # --- Game ---
-    - name: Template game compose
-      ansible.builtin.template:
-        src: ../stacks/game/docker-compose.yml.j2
-        dest: "{{ deploy_dir }}/game/docker-compose.yml"
+    # --- Game Web ---
+    - name: Copy game-web compose
+      ansible.builtin.copy:
+        src: ../stacks/game-web/docker-compose.yml
+        dest: "{{ deploy_dir }}/game-web/docker-compose.yml"
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: "0644"
-      when: "'game' in stacks"
-      notify: Restart game
+      when: "'game-web' in stacks"
+      notify: Restart game-web
 
-    - name: Start game
+    - name: Start game-web
       community.docker.docker_compose_v2:
-        project_src: "{{ deploy_dir }}/game"
+        project_src: "{{ deploy_dir }}/game-web"
         pull: always
         state: present
-      when: "'game' in stacks"
+      when: "'game-web' in stacks"
+
+    # --- Game Server ---
+    - name: Template game-server compose
+      ansible.builtin.template:
+        src: ../stacks/game-server/docker-compose.yml.j2
+        dest: "{{ deploy_dir }}/game-server/docker-compose.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+      when: "'game-server' in stacks"
+      notify: Restart game-server
+
+    - name: Start game-server
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}/game-server"
+        pull: always
+        state: present
+      when: "'game-server' in stacks"
 
   handlers:
     - name: Restart caddy
@@ -210,9 +228,14 @@
         project_src: "{{ deploy_dir }}/talk"
         state: restarted
 
-    - name: Restart game
+    - name: Restart game-web
       community.docker.docker_compose_v2:
-        project_src: "{{ deploy_dir }}/game"
+        project_src: "{{ deploy_dir }}/game-web"
+        state: restarted
+
+    - name: Restart game-server
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}/game-server"
         state: restarted
 
     - name: Restart wud

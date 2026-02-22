@@ -1,8 +1,8 @@
 services:
   game-server:
-    image: ghcr.io/flow-industries/game:latest
+    image: ghcr.io/flow-industries/game-server:latest
     ports:
-      - "{{ game_port }}:{{ game_port }}/udp"
+      - "{{ game_port }}:{{ game_port }}"
     environment:
       REGION: {{ game_region }}
       MAX_PLAYERS: {{ game_max_players }}

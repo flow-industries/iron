@@ -1,0 +1,20 @@
+services:
+  game-web:
+    image: ghcr.io/flow-industries/game-web:latest
+    restart: always
+    networks:
+      - flow
+    labels:
+      - "wud.watch=true"
+      - "wud.watch.digest=true"
+      - "wud.trigger.include=rollout"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  flow:
+    external: true
