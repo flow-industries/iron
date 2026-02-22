@@ -23,20 +23,50 @@
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: "0755"
-      loop: "{{ stacks + ['caddy', 'watchtower'] }}"
+      loop: "{{ stacks + ['caddy', 'wud'] }}"
 
-    # --- Watchtower (always) ---
-    - name: Copy watchtower compose
+    # --- Migration: remove old watchtower ---
+    - name: Stop old watchtower
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}/watchtower"
+        state: absent
+      register: watchtower_stop
+      failed_when:
+        - watchtower_stop.failed
+        - "'not found' not in (watchtower_stop.msg | default(''))"
+        - "'does not exist' not in (watchtower_stop.msg | default(''))"
+
+    # --- WUD (always) ---
+    - name: Template WUD .env
+      ansible.builtin.template:
+        src: ../stacks/wud/.env.j2
+        dest: "{{ deploy_dir }}/wud/.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+      notify: Restart wud
+
+    - name: Copy WUD compose
       ansible.builtin.copy:
-        src: ../stacks/watchtower/docker-compose.yml
-        dest: "{{ deploy_dir }}/watchtower/docker-compose.yml"
+        src: ../stacks/wud/docker-compose.yml
+        dest: "{{ deploy_dir }}/wud/docker-compose.yml"
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: "0644"
+      notify: Restart wud
 
-    - name: Start watchtower
+    - name: Copy rollout script
+      ansible.builtin.copy:
+        src: ../stacks/wud/rollout.sh
+        dest: "{{ deploy_dir }}/wud/rollout.sh"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0755"
+      notify: Restart wud
+
+    - name: Start WUD
       community.docker.docker_compose_v2:
-        project_src: "{{ deploy_dir }}/watchtower"
+        project_src: "{{ deploy_dir }}/wud"
         pull: always
         state: present
 
@@ -183,4 +213,9 @@
     - name: Restart game
       community.docker.docker_compose_v2:
         project_src: "{{ deploy_dir }}/game"
+        state: restarted
+
+    - name: Restart wud
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}/wud"
         state: restarted

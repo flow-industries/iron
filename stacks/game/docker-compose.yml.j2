@@ -8,15 +8,6 @@ services:
       MAX_PLAYERS: {{ game_max_players }}
     restart: always
     labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-
-  watchtower:
-    image: containrrr/watchtower
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /root/.docker/config.json:/config.json:ro
-    environment:
-      WATCHTOWER_POLL_INTERVAL: {{ watchtower_poll_interval }}
-      WATCHTOWER_CLEANUP: "true"
-      WATCHTOWER_LABEL_ENABLE: "true"
-    restart: always
+      - "wud.watch=true"
+      - "wud.watch.digest=true"
+      - "wud.trigger.include=gameupdate"
