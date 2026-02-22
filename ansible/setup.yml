@@ -47,6 +47,22 @@
         state: started
         enabled: true
 
+    - name: Create Docker CLI plugins directory
+      ansible.builtin.file:
+        path: /usr/libexec/docker/cli-plugins
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install docker-rollout plugin
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/wowu/docker-rollout/main/docker-rollout
+        dest: /usr/libexec/docker/cli-plugins/docker-rollout
+        owner: root
+        group: root
+        mode: "0755"
+
     - name: Log in to GHCR
       community.docker.docker_login:
         registry: ghcr.io

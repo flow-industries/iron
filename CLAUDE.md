@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Repo Is
 
-Infrastructure-as-code for the Flow ecosystem. Ansible deploys Docker Compose stacks to servers. Watchtower auto-deploys new images from GHCR. Caddy handles reverse proxy and HTTPS. This repo never contains Dockerfiles — service repos own those.
+Infrastructure-as-code for the Flow ecosystem. Ansible deploys Docker Compose stacks to servers. WUD (What's Up Docker) detects new images on GHCR and triggers docker-rollout for zero-downtime deploys. Caddy handles reverse proxy, HTTPS, and health-checked load balancing. This repo never contains Dockerfiles — service repos own those.
 
 ## Commands
 
@@ -42,9 +42,9 @@ ansible-vault edit ansible/group_vars/secrets.yml
 
 **Docker networking:** All HTTP services and Caddy join a shared `flow` network. Caddy reaches services by Docker DNS name (e.g., `site:3000`). Game servers use direct UDP — no Caddy.
 
-**deploy.yml is a single play on `hosts: all`.** It uses `when: "'<stack>' in stacks"` conditions to deploy only what each host needs. Caddy and Watchtower always deploy.
+**deploy.yml is a single play on `hosts: all`.** It uses `when: "'<stack>' in stacks"` conditions to deploy only what each host needs. Caddy and WUD always deploy.
 
-**Templates vs static files:** Most compose files are static (`copy`). Three are Jinja2 templates: `stacks/caddy/Caddyfile.j2` (from domains), `stacks/auth/.env.j2` (vault secrets), `stacks/game/docker-compose.yml.j2` (per-host game config).
+**Templates vs static files:** Most compose files are static (`copy`). Jinja2 templates: `stacks/caddy/Caddyfile.j2` (from domains), `stacks/auth/.env.j2` (vault secrets), `stacks/wud/.env.j2` (GHCR token), `stacks/game/docker-compose.yml.j2` (per-host game config).
 
 ## Conventions
 
@@ -53,7 +53,8 @@ ansible-vault edit ansible/group_vars/secrets.yml
 - Handler names start with uppercase (e.g., `Restart auth`).
 - All `import_playbook` entries must have a `name` field.
 - Use `ansible.builtin.*` fully qualified module names.
-- Watchtower only updates containers with the `com.centurylinklabs.watchtower.enable=true` label. Database containers must NOT have this label.
+- WUD only watches containers with the `wud.watch=true` label. Database containers must have `wud.watch=false`.
+- HTTP services use `wud.trigger.include=rollout` for zero-downtime deploys via docker-rollout. Game server uses `wud.trigger.include=gameupdate` for stop-and-replace (UDP port conflict prevents scaling).
 
 ## Secrets
 
