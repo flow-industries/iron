@@ -1,6 +1,6 @@
 services:
   game-server:
-    image: ghcr.io/flow-industries/flow-game:latest
+    image: ghcr.io/flow-industries/game:latest
     ports:
       - "{{ game_port }}:{{ game_port }}/udp"
     environment:
