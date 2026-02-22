@@ -1,0 +1,12 @@
+services:
+  site:
+    image: ghcr.io/flow-industries/site:latest
+    restart: always
+    networks:
+      - flow
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+networks:
+  flow:
+    external: true

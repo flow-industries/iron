@@ -1,43 +1,19 @@
 ---
 all:
-  children:
-    web:
-      hosts:
-        web-1:
-          ansible_host: web-1.flow.industries
-      vars:
-        stack: web
-        domains:
-          - { host: "flow.industries", upstream: "site:3000" }
-          - { host: "id.flow.industries", upstream: "auth:3000" }
-
-    social:
-      hosts:
-        social-1:
-          ansible_host: social-1.flow.industries
-      vars:
-        stack: social
-        domains:
-          - { host: "flow.talk", upstream: "talk:3000" }
-
-    db:
-      hosts:
-        db-1:
-          ansible_host: db-1.flow.industries
-      vars:
-        stack: db
-
-    game:
-      hosts:
-        game-1:
-          ansible_host: game-1.flow.industries
-          game_region: eu
-          game_port: 7000
-          game_max_players: 100
-        # game-2:
-        #   ansible_host: game-2.flow.industries
-        #   game_region: us
-        #   game_port: 7000
-        #   game_max_players: 200
-      vars:
-        stack: game
+  hosts:
+    flow-1:
+      ansible_host: flow-1.flow.industries
+      stacks: [site, auth, talk]
+      domains:
+        - { host: "flow.industries", upstream: "site:3000", zone: "flow.industries" }
+        - { host: "id.flow.industries", upstream: "auth:3000", zone: "flow.industries" }
+        - { host: "flow.talk", upstream: "talk:3000", zone: "flow.talk" }
+    game-1:
+      ansible_host: game-1.flow.industries
+      stacks: [game]
+      game_region: eu
+      game_port: 7000
+      game_max_players: 100
+      domains:
+        - { host: "flow.game", zone: "flow.game", proxied: false }
+        - { host: "eu.play.flow.game", zone: "flow.game", proxied: false }

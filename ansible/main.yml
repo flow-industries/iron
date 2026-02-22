@@ -1,4 +1,7 @@
 ---
-- import_playbook: setup.yml
-- import_playbook: deploy.yml
-- import_playbook: dns.yml
+- name: Setup servers
+  ansible.builtin.import_playbook: setup.yml
+- name: Deploy stacks
+  ansible.builtin.import_playbook: deploy.yml
+- name: Configure DNS
+  ansible.builtin.import_playbook: dns.yml

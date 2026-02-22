@@ -1,4 +1,23 @@
 services:
+  auth:
+    image: ghcr.io/flow-industries/auth:latest
+    environment:
+      DATABASE_URL: postgresql://flow:${DB_PASSWORD}@postgres:5432/flow_auth
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      BETTER_AUTH_SIWE_DOMAIN: ${BETTER_AUTH_SIWE_DOMAIN}
+      PASSKEY_RP_ID: ${PASSKEY_RP_ID}
+      PASSKEY_RP_NAME: ${PASSKEY_RP_NAME}
+      NODE_ENV: production
+    restart: always
+    networks:
+      - flow
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     image: postgres:17
     environment:
@@ -7,21 +26,20 @@ services:
       POSTGRES_DB: flow_auth
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     restart: always
+    networks:
+      - flow
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U flow -d flow_auth"]
       interval: 5s
       timeout: 5s
       retries: 5
-    # No watchtower label — never auto-update the database
 
   backup:
     image: prodrigestivill/postgres-backup-local
     restart: always
     volumes:
-      - /opt/flow/backups:/backups
+      - ./backups:/backups
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_DB: flow_auth
@@ -34,6 +52,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+networks:
+  flow:
+    external: true
 
 volumes:
   pgdata:

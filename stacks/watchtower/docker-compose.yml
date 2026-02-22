@@ -1,15 +1,4 @@
 services:
-  game-server:
-    image: ghcr.io/flow-industries/flow-game:latest
-    ports:
-      - "7000:7000/udp"
-    environment:
-      REGION: eu
-      MAX_PLAYERS: 100
-    restart: always
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-
   watchtower:
     image: containrrr/watchtower
     volumes:

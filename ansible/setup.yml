@@ -20,10 +20,8 @@
     - name: Create deploy user
       ansible.builtin.user:
         name: "{{ deploy_user }}"
-        groups: docker
         shell: /bin/bash
         create_home: true
-      ignore_errors: true  # docker group may not exist yet before geerlingguy.docker runs
 
     - name: Authorize SSH key for deploy user
       ansible.posix.authorized_key:
