@@ -1,0 +1,165 @@
+---
+- name: Deploy web stack
+  hosts: web
+  become: true
+  tasks:
+    - name: Create deploy directory
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+
+    - name: Template .env file
+      ansible.builtin.template:
+        src: ../templates/env.web.j2
+        dest: "{{ deploy_dir }}/.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+      notify: restart web stack
+
+    - name: Copy Caddyfile
+      ansible.builtin.template:
+        src: ../templates/Caddyfile.web.j2
+        dest: "{{ deploy_dir }}/Caddyfile"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+      notify: restart web stack
+
+    - name: Copy web compose file
+      ansible.builtin.copy:
+        src: ../compose/web.yml
+        dest: "{{ deploy_dir }}/docker-compose.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+      notify: restart web stack
+
+    - name: Start web stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}"
+        pull: always
+        state: present
+
+  handlers:
+    - name: restart web stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}"
+        state: restarted
+
+- name: Deploy social stack
+  hosts: social
+  become: true
+  tasks:
+    - name: Create deploy directory
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+
+    - name: Template .env file
+      ansible.builtin.template:
+        src: ../templates/env.social.j2
+        dest: "{{ deploy_dir }}/.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+
+    - name: Copy Caddyfile
+      ansible.builtin.template:
+        src: ../templates/Caddyfile.social.j2
+        dest: "{{ deploy_dir }}/Caddyfile"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+      notify: restart social stack
+
+    - name: Copy social compose file
+      ansible.builtin.copy:
+        src: ../compose/social.yml
+        dest: "{{ deploy_dir }}/docker-compose.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+      notify: restart social stack
+
+    - name: Start social stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}"
+        pull: always
+        state: present
+
+  handlers:
+    - name: restart social stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}"
+        state: restarted
+
+- name: Deploy database stack
+  hosts: db
+  become: true
+  tasks:
+    - name: Create deploy directory
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+
+    - name: Create backup directory
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}/backups"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+
+    - name: Template .env file
+      ansible.builtin.template:
+        src: ../templates/env.db.j2
+        dest: "{{ deploy_dir }}/.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+
+    - name: Copy db compose file
+      ansible.builtin.copy:
+        src: ../compose/db.yml
+        dest: "{{ deploy_dir }}/docker-compose.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+
+    - name: Start db stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}"
+        pull: always
+        state: present
+
+- name: Deploy game stack
+  hosts: game
+  become: true
+  tasks:
+    - name: Create deploy directory
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+
+    - name: Generate game compose file
+      ansible.builtin.template:
+        src: ../templates/docker-compose.game.yml.j2
+        dest: "{{ deploy_dir }}/docker-compose.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+      notify: restart game stack
+
+    - name: Start game stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}"
+        pull: always
+        state: present
+
+  handlers:
+    - name: restart game stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}"
+        state: restarted

@@ -1,0 +1,5 @@
+---
+docker_registry: ghcr.io/flow-industries
+watchtower_poll_interval: 5
+deploy_user: deploy
+deploy_dir: /opt/flow

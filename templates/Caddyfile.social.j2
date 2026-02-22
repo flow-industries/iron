@@ -1,0 +1,5 @@
+{% for domain in domains %}
+{{ domain.host }} {
+    reverse_proxy {{ domain.upstream }}
+}
+{% endfor %}

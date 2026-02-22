@@ -1,0 +1,44 @@
+---
+- name: Configure Cloudflare DNS records
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Web domains
+      community.general.cloudflare_dns:
+        zone: flow.industries
+        record: "{{ item.host }}"
+        type: A
+        value: "{{ hostvars[groups['web'][0]]['ansible_host'] }}"
+        api_token: "{{ cloudflare_api_token }}"
+        proxied: true
+      loop: "{{ hostvars[groups['web'][0]]['domains'] }}"
+
+    - name: Social domains
+      community.general.cloudflare_dns:
+        zone: flow.talk
+        record: "{{ item.host }}"
+        type: A
+        value: "{{ hostvars[groups['social'][0]]['ansible_host'] }}"
+        api_token: "{{ cloudflare_api_token }}"
+        proxied: true
+      loop: "{{ hostvars[groups['social'][0]]['domains'] }}"
+
+    - name: Game server DNS per region
+      community.general.cloudflare_dns:
+        zone: flow.game
+        record: "{{ hostvars[item]['game_region'] }}.play.flow.game"
+        type: A
+        value: "{{ hostvars[item]['ansible_host'] }}"
+        api_token: "{{ cloudflare_api_token }}"
+        proxied: false
+      loop: "{{ groups['game'] }}"
+
+    - name: Game root domain
+      community.general.cloudflare_dns:
+        zone: flow.game
+        record: flow.game
+        type: A
+        value: "{{ hostvars[groups['game'][0]]['ansible_host'] }}"
+        api_token: "{{ cloudflare_api_token }}"
+        proxied: false

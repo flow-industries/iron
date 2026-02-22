@@ -1,0 +1,56 @@
+---
+- name: Bootstrap and harden servers
+  hosts: all
+  become: true
+
+  pre_tasks:
+    - name: Update and upgrade
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - htop
+          - git
+        state: present
+
+    - name: Create deploy user
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        groups: docker
+        shell: /bin/bash
+        create_home: true
+      ignore_errors: true  # docker group may not exist yet before geerlingguy.docker runs
+
+    - name: Authorize SSH key for deploy user
+      ansible.posix.authorized_key:
+        user: "{{ deploy_user }}"
+        key: "{{ lookup('file', '~/.ssh/id_ed25519.pub') }}"
+        state: present
+
+  roles:
+    - devsec.hardening.os_hardening
+    - devsec.hardening.ssh_hardening
+    - geerlingguy.docker
+
+  tasks:
+    - name: Add deploy user to docker group
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        groups: docker
+        append: true
+
+    - name: Ensure Docker is running
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Log in to GHCR
+      community.docker.docker_login:
+        registry: ghcr.io
+        username: flow-industries
+        password: "{{ ghcr_token }}"

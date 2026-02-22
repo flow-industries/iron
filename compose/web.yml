@@ -1,0 +1,47 @@
+services:
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: always
+
+  site:
+    image: ghcr.io/flow-industries/site:latest
+    restart: always
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  auth:
+    image: ghcr.io/flow-industries/auth:latest
+    environment:
+      DATABASE_URL: postgresql://flow:${DB_PASSWORD}@db-1.flow.industries:5432/flow_auth
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      BETTER_AUTH_SIWE_DOMAIN: ${BETTER_AUTH_SIWE_DOMAIN}
+      PASSKEY_RP_ID: ${PASSKEY_RP_ID}
+      PASSKEY_RP_NAME: ${PASSKEY_RP_NAME}
+      NODE_ENV: production
+    restart: always
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/.docker/config.json:/config.json:ro
+    environment:
+      WATCHTOWER_POLL_INTERVAL: 5
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_LABEL_ENABLE: "true"
+    restart: always
+
+volumes:
+  caddy_data:
+  caddy_config:

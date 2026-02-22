@@ -1,0 +1,21 @@
+# Ansible
+*.retry
+vault_password
+.vault_pass
+*.vault_pass
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Secrets
+*.pem
+*.key

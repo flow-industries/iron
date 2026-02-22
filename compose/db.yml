@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: flow
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: flow_auth
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flow -d flow_auth"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # No watchtower label — never auto-update the database
+
+  backup:
+    image: prodrigestivill/postgres-backup-local
+    restart: always
+    volumes:
+      - /opt/flow/backups:/backups
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: flow_auth
+      POSTGRES_USER: flow
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
