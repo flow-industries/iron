@@ -25,6 +25,18 @@
         mode: "0755"
       loop: "{{ stacks + ['caddy', 'wud'] }}"
 
+    # --- Cleanup: stop removed stacks ---
+    - name: List running compose projects
+      ansible.builtin.command: docker compose ls --format json
+      register: running_projects
+      changed_when: false
+
+    - name: Stop removed stacks
+      community.docker.docker_compose_v2:
+        project_src: "{{ deploy_dir }}/{{ item }}"
+        state: absent
+      loop: "{{ running_projects.stdout | from_json | map(attribute='Name') | reject('in', stacks + ['caddy', 'wud']) | list }}"
+
     # --- Migration: remove old watchtower ---
     - name: Stop old watchtower
       community.docker.docker_compose_v2:

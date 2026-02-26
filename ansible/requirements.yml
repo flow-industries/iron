@@ -3,6 +3,9 @@ collections:
   - name: devsec.hardening
   - name: community.docker
   - name: community.general
+  - name: hifis.toolkit
 
 roles:
   - name: geerlingguy.docker
+  - name: geerlingguy.firewall
+  - name: robertdebock.fail2ban

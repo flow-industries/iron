@@ -33,6 +33,9 @@
     - devsec.hardening.os_hardening
     - devsec.hardening.ssh_hardening
     - geerlingguy.docker
+    - geerlingguy.firewall
+    - robertdebock.fail2ban
+    - hifis.toolkit.unattended_upgrades
 
   tasks:
     - name: Add deploy user to docker group

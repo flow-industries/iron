@@ -2,3 +2,24 @@
 docker_registry: ghcr.io/flow-industries
 deploy_user: deploy
 deploy_dir: /opt/flow
+
+# Firewall (geerlingguy.firewall)
+firewall_disable_ufw: true
+firewall_allowed_tcp_ports:
+  - "22"
+  - "80"
+  - "443"
+firewall_allowed_udp_ports: []
+firewall_flush_rules_and_chains: false
+
+# Fail2ban (robertdebock.fail2ban)
+fail2ban_bantime: 3600
+fail2ban_findtime: 600
+fail2ban_maxretry: 5
+fail2ban_services:
+  - name: sshd
+    port: ssh
+
+# Unattended upgrades (hifis.toolkit.unattended_upgrades)
+unattended_automatic_reboot: true
+unattended_automatic_reboot_time: "04:00"
