@@ -71,3 +71,20 @@
         registry: ghcr.io
         username: flow-industries
         password: "{{ ghcr_token }}"
+
+    - name: Create Caddy sites directory
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}/caddy/sites"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0755"
+
+    - name: Create base Caddyfile
+      ansible.builtin.copy:
+        dest: "{{ deploy_dir }}/caddy/Caddyfile"
+        content: "import /etc/caddy/sites/*\n"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+        force: false

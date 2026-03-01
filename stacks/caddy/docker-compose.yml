@@ -7,6 +7,7 @@ services:
       - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./sites:/etc/caddy/sites
       - caddy_data:/data
       - caddy_config:/config
     restart: always

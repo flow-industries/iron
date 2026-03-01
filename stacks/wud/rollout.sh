@@ -14,5 +14,6 @@ if [ ! -f "$COMPOSE_FILE" ]; then
 fi
 
 echo "Rolling out ${STACK} (image: ${image_name})"
+docker compose -f "$COMPOSE_FILE" pull
 docker rollout "$STACK" -f "$COMPOSE_FILE"
 echo "Rollout complete for ${STACK}"

@@ -16,6 +16,12 @@ vault_password
 .idea/
 .vscode/
 
+# Rust
+/target
+
 # Secrets
 *.pem
 *.key
+
+# Flow CLI
+fleet.env.toml
