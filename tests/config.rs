@@ -12,12 +12,34 @@ servers = ["test-1"]
 port = 80
 "#;
     let config: FleetConfig = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.domain, None);
     assert_eq!(config.servers.len(), 1);
     assert_eq!(config.servers["test-1"].host, "test-1.example.com");
+    assert_eq!(config.servers["test-1"].ip, None);
     assert_eq!(config.servers["test-1"].user, "deploy");
     assert_eq!(config.apps.len(), 1);
     assert_eq!(config.apps["web"].image, "nginx:latest");
     assert_eq!(config.apps["web"].port, Some(80));
+}
+
+#[test]
+fn parse_domain_field() {
+    let toml_str = r#"
+domain = "flow.industries"
+
+[servers.fl-1]
+host = "fl-1.flow.industries"
+ip = "10.0.0.1"
+user = "deploy"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["fl-1"]
+port = 80
+"#;
+    let config: FleetConfig = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.domain, Some("flow.industries".to_string()));
+    assert_eq!(config.servers["fl-1"].ip, Some("10.0.0.1".to_string()));
 }
 
 #[test]

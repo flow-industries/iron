@@ -16,7 +16,11 @@ jobs:
         run: pip install ansible ansible-lint
 
       - name: Install galaxy dependencies
-        run: ansible-galaxy install -r ansible/requirements.yml
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          command: ansible-galaxy install -r ansible/requirements.yml
 
       - name: Lint playbooks
         run: ansible-lint ansible/

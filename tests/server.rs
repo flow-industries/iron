@@ -7,12 +7,13 @@ fn add_writes_server_to_fleet_toml() {
     let path = dir.path().join("fleet.toml");
     std::fs::write(&path, "[servers.existing]\nhost = \"existing.example.com\"\nuser = \"deploy\"\n").unwrap();
 
-    write_server_to_config(&path, "new-server", "new.example.com", "deploy").unwrap();
+    write_server_to_config(&path, "new-server", "new.example.com", "10.0.0.1", "deploy").unwrap();
 
     let content = std::fs::read_to_string(&path).unwrap();
     let config: FleetConfig = toml::from_str(&content).unwrap();
     assert!(config.servers.contains_key("new-server"));
     assert_eq!(config.servers["new-server"].host, "new.example.com");
+    assert_eq!(config.servers["new-server"].ip, Some("10.0.0.1".to_string()));
     assert_eq!(config.servers["new-server"].user, "deploy");
 }
 
@@ -31,7 +32,7 @@ servers = ["flow-1"]
 port = 3000
 "#).unwrap();
 
-    write_server_to_config(&path, "flow-2", "flow-2.example.com", "deploy").unwrap();
+    write_server_to_config(&path, "flow-2", "flow-2.example.com", "10.0.0.2", "deploy").unwrap();
 
     let content = std::fs::read_to_string(&path).unwrap();
     let config: FleetConfig = toml::from_str(&content).unwrap();
@@ -55,7 +56,8 @@ user = "deploy"
         fleet_path.to_str().unwrap(),
         flow::cli::ServerCommand::Add {
             name: "flow-1".to_string(),
-            host: "flow-1.example.com".to_string(),
+            ip: "10.0.0.1".to_string(),
+            host: None,
             user: "deploy".to_string(),
             ssh_user: "root".to_string(),
         },

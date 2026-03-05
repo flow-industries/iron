@@ -127,13 +127,18 @@ async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool) -> Result<
             if let Some(ref cf_token) = fleet.secrets.cloudflare_api_token {
                 let sp = ui::spinner("  Ensuring DNS records...");
                 for server_name in &app.servers {
-                    let server_ip = pool
-                        .exec(server_name, "hostname -I | awk '{print $1}'")
-                        .await?;
-                    let server_ip = server_ip.trim();
+                    let server = &fleet.servers[server_name];
+                    let server_ip = match &server.ip {
+                        Some(ip) => ip.clone(),
+                        None => pool
+                            .exec(server_name, "hostname -I | awk '{print $1}'")
+                            .await?
+                            .trim()
+                            .to_string(),
+                    };
 
                     for route in &routing.routes {
-                        cloudflare::ensure_dns_record(cf_token, route, server_ip).await?;
+                        cloudflare::ensure_dns_record(cf_token, route, &server_ip).await?;
                     }
                 }
                 sp.finish_and_clear();

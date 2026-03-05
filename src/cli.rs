@@ -50,9 +50,13 @@ pub enum ServerCommand {
         /// Server name (used as identifier in fleet.toml)
         name: String,
 
-        /// Hostname or IP address
+        /// Server IP address
         #[arg(long)]
-        host: String,
+        ip: String,
+
+        /// Override hostname (default: {name}.{domain})
+        #[arg(long)]
+        host: Option<String>,
 
         /// Deploy user (created by Ansible, used for future SSH)
         #[arg(long, default_value = "deploy")]

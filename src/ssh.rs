@@ -12,7 +12,8 @@ impl SshPool {
     pub async fn connect(servers: &HashMap<String, Server>) -> Result<Self> {
         let mut sessions = HashMap::new();
         for (name, server) in servers {
-            let dest = format!("ssh://{}@{}", server.user, server.host);
+            let ssh_target = server.ip.as_deref().unwrap_or(&server.host);
+            let dest = format!("ssh://{}@{}", server.user, ssh_target);
             let session = Session::connect(&dest, KnownHosts::Strict)
                 .await
                 .with_context(|| format!("Failed to connect to {}", name))?;
@@ -22,7 +23,8 @@ impl SshPool {
     }
 
     pub async fn connect_one(name: &str, server: &Server) -> Result<Self> {
-        let dest = format!("ssh://{}@{}", server.user, server.host);
+        let ssh_target = server.ip.as_deref().unwrap_or(&server.host);
+        let dest = format!("ssh://{}@{}", server.user, ssh_target);
         let session = Session::connect(&dest, KnownHosts::Strict)
             .await
             .with_context(|| format!("Failed to connect to {}", name))?;

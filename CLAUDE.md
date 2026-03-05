@@ -29,12 +29,13 @@ flow status --server flow-1
 flow logs site
 flow logs site -f
 
-# Server management
-flow server add prod-1 --host prod-1.flow.industries
-flow server add prod-1 --host prod-1.flow.industries --ssh-user ubuntu
-flow server remove prod-1
+# Server management (creates DNS record, bootstraps via Ansible)
+flow server add fl-1 --ip 164.90.130.5
+flow server add fl-1 --ip 164.90.130.5 --host custom.flow.industries
+flow server add fl-1 --ip 164.90.130.5 --ssh-user ubuntu
+flow server remove fl-1
 flow server check
-flow server check prod-1
+flow server check fl-1
 
 # Install Ansible dependencies (once)
 ansible-galaxy install -r ansible/requirements.yml

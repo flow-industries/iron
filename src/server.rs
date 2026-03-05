@@ -10,10 +10,11 @@ pub async fn run(config_path: &str, command: ServerCommand) -> Result<()> {
     match command {
         ServerCommand::Add {
             name,
+            ip,
             host,
             user,
             ssh_user,
-        } => add(config_path, &name, &host, &user, &ssh_user).await,
+        } => add(config_path, &name, &ip, host.as_deref(), &user, &ssh_user).await,
         ServerCommand::Remove { name } => remove(config_path, &name),
         ServerCommand::Check { name } => check(config_path, name.as_deref()).await,
     }
@@ -22,7 +23,8 @@ pub async fn run(config_path: &str, command: ServerCommand) -> Result<()> {
 async fn add(
     config_path: &str,
     name: &str,
-    host: &str,
+    ip: &str,
+    host_override: Option<&str>,
     user: &str,
     ssh_user: &str,
 ) -> Result<()> {
@@ -36,19 +38,38 @@ async fn add(
         bail!("Server '{}' already exists", name);
     }
 
+    let hostname = match host_override {
+        Some(h) => h.to_string(),
+        None => {
+            let domain = config.domain.as_deref().ok_or_else(|| {
+                anyhow::anyhow!("Cannot derive hostname: no 'domain' in fleet.toml (use --host to specify)")
+            })?;
+            format!("{}.{}", name, domain)
+        }
+    };
+
     let env_path = config_path.with_file_name("fleet.env.toml");
-    let ghcr_token = if env_path.exists() {
+    let (ghcr_token, cf_token) = if env_path.exists() {
         let env_content = std::fs::read_to_string(&env_path)
             .with_context(|| format!("Failed to read {}", env_path.display()))?;
         let env_config: EnvConfig = toml::from_str(&env_content)
             .with_context(|| format!("Failed to parse {}", env_path.display()))?;
-        env_config
-            .fleet
-            .ghcr_token
-            .filter(|t| !t.is_empty())
+        (
+            env_config.fleet.ghcr_token.filter(|t| !t.is_empty()),
+            env_config.fleet.cloudflare_api_token.filter(|t| !t.is_empty()),
+        )
     } else {
-        None
+        (None, None)
     };
+
+    let cf_token = cf_token.ok_or_else(|| {
+        anyhow::anyhow!("Cannot create DNS record: cloudflare_api_token not set in fleet.env.toml")
+    })?;
+
+    let sp = ui::spinner(&format!("Creating DNS record {} → {}...", hostname, ip));
+    crate::cloudflare::ensure_dns_record(&cf_token, &hostname, ip).await?;
+    sp.finish_and_clear();
+    ui::success(&format!("{} → {}", hostname, ip));
 
     let ansible_dir = config_path.parent().unwrap_or(Path::new(".")).join("ansible");
     if !ansible_dir.join("setup.yml").exists() {
@@ -62,7 +83,7 @@ async fn add(
     let mut cmd = tokio::process::Command::new("ansible-playbook");
     cmd.arg("ansible/setup.yml")
         .arg("-i")
-        .arg(format!("{},", host))
+        .arg(format!("{},", ip))
         .arg("-u")
         .arg(ssh_user)
         .current_dir(config_path.parent().unwrap_or(Path::new(".")));
@@ -78,7 +99,7 @@ async fn add(
         bail!("Ansible setup failed (exit code: {})", status);
     }
 
-    write_server_to_config(config_path, name, host, user)?;
+    write_server_to_config(config_path, name, &hostname, ip, user)?;
     ui::success(&format!("Server '{}' added and bootstrapped", name));
     Ok(())
 }
@@ -134,7 +155,11 @@ async fn check(config_path: &str, name: Option<&str>) -> Result<()> {
     };
 
     for (name, server) in &servers_to_check {
-        ui::header(&format!("Server: {} ({})", name, server.host));
+        let display = match &server.ip {
+            Some(ip) => format!("Server: {} ({} / {})", name, server.host, ip),
+            None => format!("Server: {} ({})", name, server.host),
+        };
+        ui::header(&display);
 
         let pool = match SshPool::connect_one(name, server).await {
             Ok(pool) => {
@@ -165,7 +190,7 @@ async fn run_check(pool: &SshPool, server: &str, label: &str, cmd: &str) {
     }
 }
 
-pub fn write_server_to_config(config_path: &Path, name: &str, host: &str, user: &str) -> Result<()> {
+pub fn write_server_to_config(config_path: &Path, name: &str, host: &str, ip: &str, user: &str) -> Result<()> {
     let content = std::fs::read_to_string(config_path)
         .with_context(|| format!("Failed to read {}", config_path.display()))?;
     let mut doc = content
@@ -180,6 +205,7 @@ pub fn write_server_to_config(config_path: &Path, name: &str, host: &str, user: 
 
     let mut server_table = toml_edit::Table::new();
     server_table.insert("host", toml_edit::value(host));
+    server_table.insert("ip", toml_edit::value(ip));
     server_table.insert("user", toml_edit::value(user));
     servers.insert(name, toml_edit::Item::Table(server_table));
 

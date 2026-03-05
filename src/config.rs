@@ -5,6 +5,7 @@ use std::path::Path;
 
 #[derive(Debug, Deserialize)]
 pub struct FleetConfig {
+    pub domain: Option<String>,
     #[serde(default)]
     pub servers: HashMap<String, Server>,
     #[serde(default)]
@@ -15,6 +16,7 @@ pub struct FleetConfig {
 #[serde(deny_unknown_fields)]
 pub struct Server {
     pub host: String,
+    pub ip: Option<String>,
     #[serde(default = "default_user")]
     pub user: String,
 }
@@ -105,6 +107,7 @@ pub struct FleetSecrets {
 
 #[derive(Debug)]
 pub struct Fleet {
+    pub domain: Option<String>,
     pub servers: HashMap<String, Server>,
     pub apps: HashMap<String, ResolvedApp>,
     pub secrets: FleetSecrets,
@@ -297,6 +300,7 @@ pub fn load(config_path: &str) -> Result<Fleet> {
     }
 
     Ok(Fleet {
+        domain: config.domain,
         servers: config.servers,
         apps: resolved_apps,
         secrets: env_config.fleet,

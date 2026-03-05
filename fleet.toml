@@ -1,3 +1,5 @@
+domain = "flow.industries"
+
 [servers.flow-1]
 host = "flow-1.flow.industries"
 user = "deploy"
