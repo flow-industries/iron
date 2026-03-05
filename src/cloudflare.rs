@@ -99,6 +99,34 @@ pub async fn ensure_dns_record(api_token: &str, hostname: &str, ip: &str) -> Res
     Ok(())
 }
 
+pub async fn delete_dns_record(api_token: &str, hostname: &str) -> Result<()> {
+    let client = reqwest::Client::new();
+    let zone_name = extract_zone(hostname);
+
+    let zone_id = get_zone_id(&client, api_token, &zone_name)
+        .await
+        .with_context(|| format!("Failed to find Cloudflare zone for {zone_name}"))?;
+
+    let existing = get_record(&client, api_token, &zone_id, hostname).await?;
+
+    if let Some(record) = existing {
+        let url = format!("{CF_API}/zones/{zone_id}/dns_records/{}", record.id);
+        let resp: CfResponse<serde_json::Value> = client
+            .delete(&url)
+            .bearer_auth(api_token)
+            .send()
+            .await?
+            .json()
+            .await?;
+        if !resp.success {
+            let msgs: Vec<_> = resp.errors.iter().map(|e| e.message.as_str()).collect();
+            anyhow::bail!("Failed to delete DNS record: {}", msgs.join(", "));
+        }
+    }
+
+    Ok(())
+}
+
 pub fn extract_zone(hostname: &str) -> String {
     let parts: Vec<&str> = hostname.split('.').collect();
     if parts.len() >= 2 {

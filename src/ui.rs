@@ -26,3 +26,12 @@ pub fn error(msg: &str) {
 pub fn header(msg: &str) {
     println!("\n{}", style(msg).bold().underlined());
 }
+
+pub fn confirm(msg: &str) -> bool {
+    eprint!("{} {} ", style("?").yellow().bold(), msg);
+    let mut input = String::new();
+    if std::io::stdin().read_line(&mut input).is_err() {
+        return false;
+    }
+    matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
+}
