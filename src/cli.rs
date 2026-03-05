@@ -34,6 +34,10 @@ pub enum Command {
         /// Follow log output
         #[arg(short, long)]
         follow: bool,
+
+        /// Server to tail logs from (defaults to first server)
+        #[arg(long)]
+        server: Option<String>,
     },
 
     /// Manage servers

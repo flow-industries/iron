@@ -6,10 +6,16 @@ use std::path::Path;
 #[derive(Debug, Deserialize)]
 pub struct FleetConfig {
     pub domain: Option<String>,
+    #[serde(default = "default_network")]
+    pub network: String,
     #[serde(default)]
     pub servers: HashMap<String, Server>,
     #[serde(default)]
     pub apps: HashMap<String, App>,
+}
+
+fn default_network() -> String {
+    "flow".to_string()
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -108,6 +114,7 @@ pub struct FleetSecrets {
 #[derive(Debug)]
 pub struct Fleet {
     pub domain: Option<String>,
+    pub network: String,
     pub servers: HashMap<String, Server>,
     pub apps: HashMap<String, ResolvedApp>,
     pub secrets: FleetSecrets,
@@ -289,6 +296,7 @@ pub fn load(config_path: &str) -> Result<Fleet> {
 
     Ok(Fleet {
         domain: config.domain,
+        network: config.network,
         servers: config.servers,
         apps: resolved_apps,
         secrets: env_config.fleet,

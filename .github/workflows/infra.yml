@@ -27,6 +27,4 @@ jobs:
         continue-on-error: true
 
       - name: Syntax check playbooks
-        run: |
-          ansible-playbook --syntax-check ansible/setup.yml
-          ansible-playbook --syntax-check ansible/deploy.yml
+        run: ansible-playbook --syntax-check ansible/setup.yml

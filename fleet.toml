@@ -1,4 +1,5 @@
 domain = "flow.industries"
+network = "flow"
 
 [servers.flow-1]
 host = "flow-1.flow.industries"

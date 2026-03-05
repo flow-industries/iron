@@ -32,6 +32,16 @@ pub async fn run(fleet: &Fleet, app_filter: Option<&str>) -> Result<()> {
     let pool = SshPool::connect(&servers_to_connect).await?;
     sp.finish_and_clear();
 
+    let sp = ui::spinner("Ensuring Docker network...");
+    for server_name in &needed_servers {
+        pool.exec(
+            server_name,
+            &format!("docker network create {} 2>/dev/null || true", fleet.network),
+        )
+        .await?;
+    }
+    sp.finish_and_clear();
+
     for app in &apps {
         deploy_app(fleet, app, &pool).await?;
     }
@@ -49,7 +59,7 @@ async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool) -> Result<
     println!();
     ui::header(&format!("Deploying {}", app.name));
 
-    let compose_yaml = compose::generate(app);
+    let compose_yaml = compose::generate(app, &fleet.network);
     let env_content = compose::generate_env(app);
     let caddy_fragment = caddy::generate(app);
 

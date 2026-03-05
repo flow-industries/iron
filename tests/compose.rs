@@ -24,7 +24,7 @@ fn simple_app() -> ResolvedApp {
 #[test]
 fn generate_simple_compose() {
     let app = simple_app();
-    let output = generate(&app);
+    let output = generate(&app, "flow");
     assert!(output.contains("image: ghcr.io/flow-industries/site:latest"));
     assert!(output.contains("wud.trigger.include=rollout"));
     assert!(output.contains("networks:"));
@@ -37,7 +37,7 @@ fn generate_simple_compose() {
 fn generate_recreate_strategy() {
     let mut app = simple_app();
     app.deploy_strategy = DeployStrategy::Recreate;
-    let output = generate(&app);
+    let output = generate(&app, "flow");
     assert!(output.contains("wud.trigger.include=gameupdate"));
 }
 
@@ -58,7 +58,7 @@ fn generate_with_ports() {
             protocol: "tcp".to_string(),
         }],
     };
-    let output = generate(&app);
+    let output = generate(&app, "flow");
     assert!(output.contains("\"9999:9999\""));
     assert!(!output.contains("networks:"));
 }
@@ -97,12 +97,21 @@ fn generate_with_sidecars() {
         ],
         ports: vec![],
     };
-    let output = generate(&app);
+    let output = generate(&app, "flow");
     assert!(output.contains("postgres:"));
     assert!(output.contains("pg_isready"));
     assert!(output.contains("wud.watch=false"));
     assert!(output.contains("pgdata:"));
     assert!(output.contains("depends_on:"));
+}
+
+#[test]
+fn generate_custom_network_name() {
+    let app = simple_app();
+    let output = generate(&app, "mynet");
+    assert!(output.contains("- mynet"));
+    assert!(output.contains("mynet:"));
+    assert!(output.contains("external: true"));
 }
 
 #[test]

@@ -26,7 +26,3 @@ pub fn error(msg: &str) {
 pub fn header(msg: &str) {
     println!("\n{}", style(msg).bold().underlined());
 }
-
-pub fn dim(msg: &str) -> String {
-    style(msg).dim().to_string()
-}

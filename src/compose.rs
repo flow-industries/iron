@@ -1,6 +1,6 @@
 use crate::config::{DeployStrategy, ResolvedApp};
 
-pub fn generate(app: &ResolvedApp) -> String {
+pub fn generate(app: &ResolvedApp, network: &str) -> String {
     let mut out = String::from("services:\n");
 
     out.push_str(&format!("  {}:\n", app.name));
@@ -33,7 +33,7 @@ pub fn generate(app: &ResolvedApp) -> String {
 
     if app.routing.is_some() {
         out.push_str("    networks:\n");
-        out.push_str("      - flow\n");
+        out.push_str(&format!("      - {}\n", network));
     }
 
     let wud_trigger = if app.deploy_strategy == DeployStrategy::Recreate {
@@ -100,7 +100,7 @@ pub fn generate(app: &ResolvedApp) -> String {
 
         if app.routing.is_some() {
             out.push_str("    networks:\n");
-            out.push_str("      - flow\n");
+            out.push_str(&format!("      - {}\n", network));
         }
 
         if let Some(ref hc) = svc.healthcheck {
@@ -128,7 +128,7 @@ pub fn generate(app: &ResolvedApp) -> String {
 
     if app.routing.is_some() {
         out.push_str("\nnetworks:\n");
-        out.push_str("  flow:\n");
+        out.push_str(&format!("  {}:\n", network));
         out.push_str("    external: true\n");
     }
 

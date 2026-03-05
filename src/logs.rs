@@ -5,7 +5,7 @@ use crate::config::Fleet;
 use crate::ssh::SshPool;
 use crate::ui;
 
-pub async fn run(fleet: &Fleet, app_name: &str, follow: bool) -> Result<()> {
+pub async fn run(fleet: &Fleet, app_name: &str, follow: bool, server: Option<&str>) -> Result<()> {
     let app = fleet
         .apps
         .get(app_name)
@@ -15,7 +15,26 @@ pub async fn run(fleet: &Fleet, app_name: &str, follow: bool) -> Result<()> {
         bail!("App '{app_name}' has no servers assigned");
     }
 
-    let server_name = &app.servers[0];
+    let server_name = match server {
+        Some(s) => {
+            if !app.servers.contains(&s.to_string()) {
+                bail!("App '{}' is not deployed to server '{}'", app_name, s);
+            }
+            s.to_string()
+        }
+        None => {
+            if app.servers.len() > 1 {
+                eprintln!(
+                    "Note: {} is on {} servers, showing logs from {} (use --server to pick)",
+                    app_name,
+                    app.servers.len(),
+                    app.servers[0]
+                );
+            }
+            app.servers[0].clone()
+        }
+    };
+    let server_name = &server_name;
     let server = fleet
         .servers
         .get(server_name)

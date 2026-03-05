@@ -1,104 +1,111 @@
 # iron
 
-Infrastructure-as-code for the Flow ecosystem. Single source of truth for all server configuration, deployment, and networking.
+Infrastructure-as-code for the Flow ecosystem. The `flow` CLI reads `fleet.toml` and handles deployment, DNS, reverse proxy, and server bootstrapping.
 
 ## Stack
 
-- **Config management:** Ansible (push-based, SSH)
+- **CLI:** Rust (`flow`)
+- **Config:** `fleet.toml` (servers, apps, routing) + `fleet.env.toml` (secrets, gitignored)
 - **Containers:** Docker Compose
-- **Auto-deploy:** Watchtower (polls GHCR every 5s)
+- **Auto-deploy:** WUD (What's Up Docker) + docker-rollout for zero-downtime
 - **Reverse proxy:** Caddy (automatic HTTPS)
-- **Secrets:** ansible-vault
-- **Hardening:** devsec.hardening (os + ssh)
+- **DNS:** Cloudflare API
+- **Server setup:** Ansible (hardening, Docker, firewall, fail2ban)
 
 ## Prerequisites
 
-- Ansible 2.16+
-- `ansible-galaxy install -r ansible/requirements.yml`
+- Rust toolchain
 - SSH agent with key for target servers
+- `fleet.env.toml` with `cloudflare_api_token` and `ghcr_token`
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-ansible-galaxy install -r ansible/requirements.yml
+cargo build --release
 
-# Create vault secrets
-ansible-vault create ansible/group_vars/secrets.yml
+# Deploy everything
+flow deploy
 
-# Run everything (setup + deploy + DNS)
-ansible-playbook ansible/main.yml
+# Deploy a single app
+flow deploy site
 
-# Or run individual playbooks
-ansible-playbook ansible/setup.yml    # OS hardening, Docker, deploy user
-ansible-playbook ansible/deploy.yml   # Deploy compose stacks
-ansible-playbook ansible/dns.yml      # Cloudflare DNS records
+# Fleet status
+flow status
+flow status --server flow-1
 
-# Dry run
-ansible-playbook ansible/main.yml --check --diff
+# Tail logs
+flow logs site
+flow logs site -f
+
+# Add a new server (creates DNS, bootstraps via Ansible)
+flow server add fl-2 --ip 164.90.130.5
+flow server add fl-2 --ip 164.90.130.5 --host custom.flow.industries
+
+# Remove a server
+flow server remove fl-2
+
+# Check server health
+flow server check
+flow server check flow-1
 ```
 
 ## Services
 
-| Stack | Domain | Description |
-|-------|--------|-------------|
-| site | flow.industries | Marketing/landing website |
-| auth | id.flow.industries | Authentication + identity + database |
-| talk | flow.talk | Decentralized social platform |
-| game | flow.game | Multiplayer game server |
+| App | Domain | Server | Strategy |
+|-----|--------|--------|----------|
+| site | flow.industries | flow-1 | rolling |
+| auth | id.flow.industries | flow-1 | rolling |
+| talk | flow.talk | flow-1 | rolling |
+| game-web | flow.game | game-1 | rolling |
+| game-server | *(direct TCP :9999)* | game-1 | recreate |
 
-## Repository Structure
-
-```
-stacks/
-  site/            flow-site container
-  auth/            flow-auth + postgres + backup
-  talk/            flow-talk container
-  game/            flow-game server (templated per host)
-  caddy/           shared reverse proxy (one per server)
-  watchtower/      auto-deploy (one per server)
-ansible/
-  inventory.yml    hosts + which stacks they run
-  setup.yml        OS hardening, Docker, deploy user
-  deploy.yml       deploy stacks per host
-  dns.yml          Cloudflare DNS from inventory
-  main.yml         runs all above in order
-```
-
-## Deploy Flow
+## How Deploy Works
 
 ```
-Service repos push code → CI builds image → pushes to GHCR
-Watchtower on servers detects new image → pulls → recreates container
-Infrastructure changes → edit this repo → run ansible-playbook
+flow deploy <app>
+  → generate docker-compose.yml + .env from fleet.toml/fleet.env.toml
+  → SSH to target server
+  → upload files to /opt/flow/<app>/
+  → docker compose pull + docker rollout (or recreate)
+  → generate Caddy fragment, reload Caddy
+  → ensure Cloudflare DNS A record
 ```
 
-## Adding a Server
+## Auto-Deploy
 
-1. Provision server, ensure hostname resolves
-2. Add to `ansible/inventory.yml` with its `stacks` list and `domains`
-3. Run `ansible-playbook ansible/main.yml`
-
-## Moving a Service
-
-1. Add the stack name to the new host's `stacks` list
-2. Move its `domains` entry to the new host
-3. Run `ansible-playbook ansible/main.yml`
+```
+Service repo pushes code → CI builds image → pushes to GHCR
+WUD detects new image → docker compose pull → docker rollout (zero-downtime)
+```
 
 ## Adding a Service
 
 1. Create service repo with Dockerfile + CI pushing to GHCR
-2. Create `stacks/<name>/docker-compose.yml`
-3. Add to a host's `stacks` list in inventory
-4. Add domain routing to the host's `domains` list
-5. Run `ansible-playbook ansible/deploy.yml`
+2. Add `[apps.<name>]` to `fleet.toml` with image, server, port, routing
+3. Add env vars to `fleet.env.toml` if needed
+4. Run `flow deploy <name>`
 
-## Useful Commands
+## Project Structure
 
-```bash
-ansible all -a "docker ps"                         # What's running
-ansible all -a "df -h"                              # Disk space
-ansible flow-1 -a "docker logs auth --tail 50"      # Service logs
-ansible-playbook ansible/deploy.yml                 # Re-deploy only
-ansible-playbook ansible/dns.yml                    # DNS only
+```
+src/
+  main.rs         CLI entrypoint
+  cli.rs          clap command definitions
+  config.rs       fleet.toml parsing and validation
+  compose.rs      docker-compose.yml generation
+  caddy.rs        Caddy reverse proxy fragments
+  cloudflare.rs   DNS A record management
+  deploy.rs       full deploy pipeline
+  server.rs       server add/remove/check
+  ssh.rs          SSH connection pool
+  status.rs       fleet status display
+  logs.rs         log tailing
+  ui.rs           terminal output helpers
+ansible/
+  setup.yml       server bootstrapping playbook
+stacks/
+  caddy/          shared Caddy reverse proxy
+  wud/            WUD auto-deploy + rollout script
+fleet.toml        server and app definitions
+fleet.env.toml    secrets and env vars (gitignored)
 ```

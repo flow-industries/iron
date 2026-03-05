@@ -86,7 +86,7 @@ async fn add(
         );
     }
 
-    let sp = ui::spinner("Running Ansible setup...");
+    ui::header("Ansible setup");
     let mut cmd = tokio::process::Command::new("ansible-playbook");
     cmd.arg("ansible/setup.yml")
         .arg("-i")
@@ -103,7 +103,6 @@ async fn add(
         .status()
         .await
         .context("Failed to run ansible-playbook")?;
-    sp.finish_and_clear();
 
     if !status.success() {
         bail!("Ansible setup failed (exit code: {status})");
@@ -200,8 +199,11 @@ async fn check(config_path: &str, name: Option<&str>) -> Result<()> {
         run_check(
             &pool,
             name,
-            "Flow network",
-            "docker network inspect flow --format '{{.Name}}'",
+            "Docker network",
+            &format!(
+                "docker network inspect {} --format '{{{{.Name}}}}'",
+                fleet.network
+            ),
         )
         .await;
 
