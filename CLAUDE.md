@@ -15,6 +15,9 @@ cargo build --release
 # Run tests
 cargo test
 
+# Initialize a new fleet.toml
+flow init
+
 # Deploy a single app
 flow deploy site
 
@@ -78,6 +81,7 @@ src/
   cloudflare.rs — ensure DNS A records via Cloudflare API
   deploy.rs     — full deploy pipeline
   check.rs      — verify containers, Caddy, stale apps, DNS
+  init.rs       — initialize new fleet.toml
   server.rs     — server add/remove/check (Ansible + toml_edit)
   status.rs     — fleet-wide status, container info, table display
   logs.rs       — tail logs from app
@@ -87,6 +91,7 @@ tests/
   compose.rs    — compose generation
   caddy.rs      — Caddy fragment generation
   cloudflare.rs — Cloudflare API
+  init.rs       — init command
   server.rs     — server management
 ```
 

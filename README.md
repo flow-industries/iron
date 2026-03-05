@@ -23,6 +23,9 @@ Infrastructure-as-code for the Flow ecosystem. The `flow` CLI reads `fleet.toml`
 ```bash
 cargo build --release
 
+# Initialize a new fleet.toml
+flow init
+
 # Deploy everything
 flow deploy
 
@@ -104,6 +107,7 @@ src/
   cloudflare.rs   DNS A record management
   deploy.rs       full deploy pipeline
   check.rs        verify fleet.toml matches server reality
+  init.rs         initialize new fleet.toml
   server.rs       server add/remove/check
   ssh.rs          SSH connection pool
   status.rs       fleet status display
@@ -114,6 +118,7 @@ tests/
   compose.rs      compose generation
   caddy.rs        Caddy fragment generation
   cloudflare.rs   Cloudflare API
+  init.rs         init command
   server.rs       server management
 ansible/
   setup.yml       server bootstrapping playbook

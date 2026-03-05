@@ -5,6 +5,7 @@ pub mod cloudflare;
 pub mod compose;
 pub mod config;
 pub mod deploy;
+pub mod init;
 pub mod logs;
 pub mod server;
 pub mod ssh;

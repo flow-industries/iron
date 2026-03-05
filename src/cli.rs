@@ -47,6 +47,9 @@ pub enum Command {
         server: Option<String>,
     },
 
+    /// Initialize a new fleet.toml in the current directory
+    Init,
+
     /// Manage servers
     Server {
         #[command(subcommand)]
