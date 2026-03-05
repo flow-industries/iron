@@ -33,7 +33,7 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
 
     if app.routing.is_some() {
         out.push_str("    networks:\n");
-        out.push_str(&format!("      - {}\n", network));
+        out.push_str(&format!("      - {network}\n"));
     }
 
     let wud_trigger = if app.deploy_strategy == DeployStrategy::Recreate {
@@ -100,7 +100,7 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
 
         if app.routing.is_some() {
             out.push_str("    networks:\n");
-            out.push_str(&format!("      - {}\n", network));
+            out.push_str(&format!("      - {network}\n"));
         }
 
         if let Some(ref hc) = svc.healthcheck {
@@ -128,7 +128,7 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
 
     if app.routing.is_some() {
         out.push_str("\nnetworks:\n");
-        out.push_str(&format!("  {}:\n", network));
+        out.push_str(&format!("  {network}:\n"));
         out.push_str("    external: true\n");
     }
 

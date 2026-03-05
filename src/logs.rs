@@ -15,24 +15,21 @@ pub async fn run(fleet: &Fleet, app_name: &str, follow: bool, server: Option<&st
         bail!("App '{app_name}' has no servers assigned");
     }
 
-    let server_name = match server {
-        Some(s) => {
-            if !app.servers.contains(&s.to_string()) {
-                bail!("App '{}' is not deployed to server '{}'", app_name, s);
-            }
-            s.to_string()
+    let server_name = if let Some(s) = server {
+        if !app.servers.contains(&s.to_string()) {
+            bail!("App '{app_name}' is not deployed to server '{s}'");
         }
-        None => {
-            if app.servers.len() > 1 {
-                eprintln!(
-                    "Note: {} is on {} servers, showing logs from {} (use --server to pick)",
-                    app_name,
-                    app.servers.len(),
-                    app.servers[0]
-                );
-            }
-            app.servers[0].clone()
+        s.to_string()
+    } else {
+        if app.servers.len() > 1 {
+            eprintln!(
+                "Note: {} is on {} servers, showing logs from {} (use --server to pick)",
+                app_name,
+                app.servers.len(),
+                app.servers[0]
+            );
         }
+        app.servers[0].clone()
     };
     let server_name = &server_name;
     let server = fleet

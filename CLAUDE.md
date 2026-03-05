@@ -77,6 +77,16 @@ src/
   ui.rs         — spinner, table, colored output
 ```
 
+## Pre-push Checklist
+
+Always run these three checks before pushing code, and fix any failures:
+
+```bash
+cargo fmt --check
+cargo clippy -- -D warnings
+cargo test
+```
+
 ## Conventions
 
 - Compose files use Docker's `${VAR}` syntax for secrets. The CLI generates both `docker-compose.yml` and `.env` files.
