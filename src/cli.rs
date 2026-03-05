@@ -85,6 +85,12 @@ pub enum Command {
         #[command(subcommand)]
         command: ServerCommand,
     },
+
+    /// Manage apps in fleet.toml
+    App {
+        #[command(subcommand)]
+        command: AppCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -125,5 +131,80 @@ pub enum ServerCommand {
     Check {
         /// Server name (checks all if omitted)
         name: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AppCommand {
+    /// Add a new app to fleet.toml
+    Add {
+        /// App name (used as identifier in fleet.toml)
+        name: String,
+
+        /// Docker image (e.g., ghcr.io/org/app:latest)
+        #[arg(long)]
+        image: String,
+
+        /// Server(s) to deploy to (must exist in fleet.toml, repeatable)
+        #[arg(long, required = true, num_args = 1..)]
+        server: Vec<String>,
+
+        /// Container port (required if routing is used)
+        #[arg(long)]
+        port: Option<u16>,
+
+        /// Route hostname(s) for Caddy reverse proxy (repeatable)
+        #[arg(long)]
+        route: Vec<String>,
+
+        /// Health check path (e.g., /health)
+        #[arg(long)]
+        health_path: Option<String>,
+
+        /// Health check interval (e.g., 5s, 1m)
+        #[arg(long)]
+        health_interval: Option<String>,
+
+        /// Direct port mapping(s) in external:internal[/protocol] format (repeatable)
+        #[arg(long, value_name = "EXTERNAL:INTERNAL[/PROTOCOL]")]
+        port_map: Vec<String>,
+
+        /// Deploy strategy: rolling (default) or recreate
+        #[arg(long, default_value = "rolling")]
+        deploy_strategy: String,
+    },
+
+    /// Add a sidecar service to an existing app
+    AddService {
+        /// App name (must exist in fleet.toml)
+        app: String,
+
+        /// Service name
+        name: String,
+
+        /// Docker image for the service
+        #[arg(long)]
+        image: String,
+
+        /// Volume mount(s) in name:path format (repeatable)
+        #[arg(long)]
+        volume: Vec<String>,
+
+        /// Healthcheck command
+        #[arg(long)]
+        healthcheck: Option<String>,
+
+        /// Service this depends on (must exist in same app)
+        #[arg(long)]
+        depends_on: Option<String>,
+    },
+
+    /// Remove a sidecar service from an app
+    RemoveService {
+        /// App name
+        app: String,
+
+        /// Service name to remove
+        name: String,
     },
 }

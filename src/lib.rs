@@ -1,3 +1,4 @@
+pub mod app;
 pub mod caddy;
 pub mod check;
 pub mod cli;

@@ -38,5 +38,6 @@ async fn main() -> Result<()> {
         Command::Remove { app, yes } => flow::remove::run(&cli.config, &app, yes).await,
         Command::Init => flow::init::run(&cli.config),
         Command::Server { command } => flow::server::run(&cli.config, command).await,
+        Command::App { command } => flow::app::run(&cli.config, command),
     }
 }
