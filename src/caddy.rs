@@ -4,14 +4,8 @@ pub fn generate(app: &ResolvedApp) -> Option<String> {
     let routing = app.routing.as_ref()?;
     let port = app.port?;
 
-    let health_path = routing
-        .health_path
-        .as_deref()
-        .unwrap_or("/health");
-    let health_interval = routing
-        .health_interval
-        .as_deref()
-        .unwrap_or("5s");
+    let health_path = routing.health_path.as_deref().unwrap_or("/health");
+    let health_interval = routing.health_interval.as_deref().unwrap_or("5s");
 
     let mut out = String::new();
     for route in &routing.routes {

@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use flow::config::FleetConfig;
 use flow::server::{remove_server_from_config, write_server_to_config};
 
@@ -5,7 +7,11 @@ use flow::server::{remove_server_from_config, write_server_to_config};
 fn add_writes_server_to_fleet_toml() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fleet.toml");
-    std::fs::write(&path, "[servers.existing]\nhost = \"existing.example.com\"\nuser = \"deploy\"\n").unwrap();
+    std::fs::write(
+        &path,
+        "[servers.existing]\nhost = \"existing.example.com\"\nuser = \"deploy\"\n",
+    )
+    .unwrap();
 
     write_server_to_config(&path, "new-server", "new.example.com", "10.0.0.1", "deploy").unwrap();
 
@@ -13,7 +19,10 @@ fn add_writes_server_to_fleet_toml() {
     let config: FleetConfig = toml::from_str(&content).unwrap();
     assert!(config.servers.contains_key("new-server"));
     assert_eq!(config.servers["new-server"].host, "new.example.com");
-    assert_eq!(config.servers["new-server"].ip, Some("10.0.0.1".to_string()));
+    assert_eq!(
+        config.servers["new-server"].ip,
+        Some("10.0.0.1".to_string())
+    );
     assert_eq!(config.servers["new-server"].user, "deploy");
 }
 
@@ -21,7 +30,9 @@ fn add_writes_server_to_fleet_toml() {
 fn add_preserves_existing_content() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fleet.toml");
-    std::fs::write(&path, r#"
+    std::fs::write(
+        &path,
+        r#"
 [servers.flow-1]
 host = "flow-1.example.com"
 user = "deploy"
@@ -30,7 +41,9 @@ user = "deploy"
 image = "nginx:latest"
 servers = ["flow-1"]
 port = 3000
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     write_server_to_config(&path, "flow-2", "flow-2.example.com", "10.0.0.2", "deploy").unwrap();
 
@@ -45,11 +58,15 @@ port = 3000
 fn add_rejects_duplicate_name() {
     let dir = tempfile::tempdir().unwrap();
     let fleet_path = dir.path().join("fleet.toml");
-    std::fs::write(&fleet_path, r#"
+    std::fs::write(
+        &fleet_path,
+        r#"
 [servers.flow-1]
 host = "flow-1.example.com"
 user = "deploy"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(flow::server::run(
@@ -70,7 +87,9 @@ user = "deploy"
 fn remove_deletes_server() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fleet.toml");
-    std::fs::write(&path, r#"
+    std::fs::write(
+        &path,
+        r#"
 [servers.flow-1]
 host = "flow-1.example.com"
 user = "deploy"
@@ -78,7 +97,9 @@ user = "deploy"
 [servers.flow-2]
 host = "flow-2.example.com"
 user = "deploy"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     remove_server_from_config(&path, "flow-1").unwrap();
 
@@ -92,7 +113,9 @@ user = "deploy"
 fn remove_rejects_referenced_server() {
     let dir = tempfile::tempdir().unwrap();
     let fleet_path = dir.path().join("fleet.toml");
-    std::fs::write(&fleet_path, r#"
+    std::fs::write(
+        &fleet_path,
+        r#"
 [servers.flow-1]
 host = "flow-1.example.com"
 
@@ -100,7 +123,9 @@ host = "flow-1.example.com"
 image = "nginx:latest"
 servers = ["flow-1"]
 port = 3000
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(flow::server::run(
@@ -119,10 +144,14 @@ port = 3000
 fn remove_rejects_nonexistent_server() {
     let dir = tempfile::tempdir().unwrap();
     let fleet_path = dir.path().join("fleet.toml");
-    std::fs::write(&fleet_path, r#"
+    std::fs::write(
+        &fleet_path,
+        r#"
 [servers.flow-1]
 host = "flow-1.example.com"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(flow::server::run(

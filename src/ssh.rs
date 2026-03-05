@@ -16,7 +16,7 @@ impl SshPool {
             let dest = format!("ssh://{}@{}", server.user, ssh_target);
             let session = Session::connect(&dest, KnownHosts::Strict)
                 .await
-                .with_context(|| format!("Failed to connect to {}", name))?;
+                .with_context(|| format!("Failed to connect to {name}"))?;
             sessions.insert(name.clone(), session);
         }
         Ok(Self { sessions })
@@ -27,7 +27,7 @@ impl SshPool {
         let dest = format!("ssh://{}@{}", server.user, ssh_target);
         let session = Session::connect(&dest, KnownHosts::Strict)
             .await
-            .with_context(|| format!("Failed to connect to {}", name))?;
+            .with_context(|| format!("Failed to connect to {name}"))?;
         let mut sessions = HashMap::new();
         sessions.insert(name.to_string(), session);
         Ok(Self { sessions })
@@ -36,7 +36,7 @@ impl SshPool {
     pub fn get(&self, server: &str) -> Result<&Session> {
         self.sessions
             .get(server)
-            .with_context(|| format!("No connection to server '{}'", server))
+            .with_context(|| format!("No connection to server '{server}'"))
     }
 
     pub async fn exec(&self, server: &str, cmd: &str) -> Result<String> {
@@ -49,7 +49,7 @@ impl SshPool {
             .stderr(Stdio::piped())
             .output()
             .await
-            .with_context(|| format!("Failed to run command on {}", server))?;
+            .with_context(|| format!("Failed to run command on {server}"))?;
 
         if !output.status.success() {
             anyhow::bail!(
@@ -77,29 +77,21 @@ impl SshPool {
             .stderr(Stdio::piped())
             .spawn()
             .await
-            .with_context(|| format!("Failed to run command on {}", server))?;
+            .with_context(|| format!("Failed to run command on {server}"))?;
         Ok(child)
     }
 
-    pub async fn upload_file(
-        &self,
-        server: &str,
-        remote_path: &str,
-        content: &str,
-    ) -> Result<()> {
+    pub async fn upload_file(&self, server: &str, remote_path: &str, content: &str) -> Result<()> {
         let session = self.get(server)?;
-        let escaped = content.replace("'", "'\\''");
-        let cmd = format!(
-            "cat > {} <<'FLOW_EOF'\n{}\nFLOW_EOF",
-            remote_path, escaped
-        );
+        let escaped = content.replace('\'', "'\\''");
+        let cmd = format!("cat > {remote_path} <<'FLOW_EOF'\n{escaped}\nFLOW_EOF");
         let output = session
             .command("sh")
             .arg("-c")
             .arg(&cmd)
             .output()
             .await
-            .with_context(|| format!("Failed to upload to {}:{}", server, remote_path))?;
+            .with_context(|| format!("Failed to upload to {server}:{remote_path}"))?;
 
         if !output.status.success() {
             anyhow::bail!(

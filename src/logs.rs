@@ -9,27 +9,24 @@ pub async fn run(fleet: &Fleet, app_name: &str, follow: bool) -> Result<()> {
     let app = fleet
         .apps
         .get(app_name)
-        .ok_or_else(|| anyhow::anyhow!("Unknown app: {}", app_name))?;
+        .ok_or_else(|| anyhow::anyhow!("Unknown app: {app_name}"))?;
 
     if app.servers.is_empty() {
-        bail!("App '{}' has no servers assigned", app_name);
+        bail!("App '{app_name}' has no servers assigned");
     }
 
     let server_name = &app.servers[0];
     let server = fleet
         .servers
         .get(server_name)
-        .ok_or_else(|| anyhow::anyhow!("Unknown server: {}", server_name))?;
+        .ok_or_else(|| anyhow::anyhow!("Unknown server: {server_name}"))?;
 
-    let sp = ui::spinner(&format!("Connecting to {}...", server_name));
+    let sp = ui::spinner(&format!("Connecting to {server_name}..."));
     let pool = SshPool::connect_one(server_name, server).await?;
     sp.finish_and_clear();
 
     let follow_flag = if follow { " -f" } else { "" };
-    let cmd = format!(
-        "cd /opt/flow/{} && docker compose logs{} --tail 100",
-        app_name, follow_flag
-    );
+    let cmd = format!("cd /opt/flow/{app_name} && docker compose logs{follow_flag} --tail 100");
 
     if follow {
         let mut child = pool.exec_streaming(server_name, &cmd).await?;
@@ -38,13 +35,13 @@ pub async fn run(fleet: &Fleet, app_name: &str, follow: bool) -> Result<()> {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
             while let Some(line) = lines.next_line().await? {
-                println!("{}", line);
+                println!("{line}");
             }
         }
         child.wait().await?;
     } else {
         let output = pool.exec(server_name, &cmd).await?;
-        print!("{}", output);
+        print!("{output}");
     }
 
     pool.close().await?;
