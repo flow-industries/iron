@@ -25,6 +25,10 @@ flow deploy
 flow status
 flow status --server flow-1
 
+# Verify fleet.toml matches reality on servers
+flow check
+flow check --server flow-1
+
 # Tail logs
 flow logs site
 flow logs site -f
@@ -73,6 +77,7 @@ src/
   caddy.rs      — generate Caddy reverse proxy fragments
   cloudflare.rs — ensure DNS A records via Cloudflare API
   deploy.rs     — full deploy pipeline
+  check.rs      — verify containers, Caddy, stale apps, DNS
   server.rs     — server add/remove/check (Ansible + toml_edit)
   status.rs     — fleet-wide status, container info, table display
   logs.rs       — tail logs from app

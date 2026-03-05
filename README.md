@@ -33,6 +33,10 @@ flow deploy site
 flow status
 flow status --server flow-1
 
+# Verify fleet.toml matches reality on servers
+flow check
+flow check --server flow-1
+
 # Tail logs
 flow logs site
 flow logs site -f
@@ -99,6 +103,7 @@ src/
   caddy.rs        Caddy reverse proxy fragments
   cloudflare.rs   DNS A record management
   deploy.rs       full deploy pipeline
+  check.rs        verify fleet.toml matches server reality
   server.rs       server add/remove/check
   ssh.rs          SSH connection pool
   status.rs       fleet status display
