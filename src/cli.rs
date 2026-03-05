@@ -19,6 +19,13 @@ pub enum Command {
         app: Option<String>,
     },
 
+    /// Verify fleet.toml matches reality on servers
+    Check {
+        /// Filter by server name
+        #[arg(long)]
+        server: Option<String>,
+    },
+
     /// Show fleet-wide status and container info
     Status {
         /// Filter by server name

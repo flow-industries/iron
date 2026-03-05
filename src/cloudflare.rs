@@ -22,9 +22,9 @@ struct Zone {
 }
 
 #[derive(Deserialize)]
-struct DnsRecord {
-    id: String,
-    content: String,
+pub struct DnsRecord {
+    pub id: String,
+    pub content: String,
 }
 
 #[derive(Serialize)]
@@ -108,7 +108,11 @@ pub fn extract_zone(hostname: &str) -> String {
     }
 }
 
-async fn get_zone_id(client: &reqwest::Client, api_token: &str, zone_name: &str) -> Result<String> {
+pub async fn get_zone_id(
+    client: &reqwest::Client,
+    api_token: &str,
+    zone_name: &str,
+) -> Result<String> {
     let url = format!("{CF_API}/zones?name={zone_name}");
     let resp: CfResponse<Vec<Zone>> = client
         .get(&url)
@@ -123,7 +127,7 @@ async fn get_zone_id(client: &reqwest::Client, api_token: &str, zone_name: &str)
     Ok(resp.result[0].id.clone())
 }
 
-async fn get_record(
+pub async fn get_record(
     client: &reqwest::Client,
     api_token: &str,
     zone_id: &str,

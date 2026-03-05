@@ -7,6 +7,10 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Command::Check { server } => {
+            let fleet = flow::config::load(&cli.config)?;
+            flow::check::run(&fleet, server.as_deref()).await
+        }
         Command::Deploy { app } => {
             let fleet = flow::config::load(&cli.config)?;
             flow::deploy::run(&fleet, app.as_deref()).await

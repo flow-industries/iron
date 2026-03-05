@@ -1,4 +1,5 @@
 pub mod caddy;
+pub mod check;
 pub mod cli;
 pub mod cloudflare;
 pub mod compose;
