@@ -7,6 +7,7 @@ use std::path::Path;
 #[derive(Debug, Deserialize)]
 pub struct FleetConfig {
     pub domain: Option<String>,
+    pub ssh_key: Option<String>,
     #[serde(default = "default_network")]
     pub network: String,
     #[serde(default)]
@@ -26,6 +27,7 @@ pub struct Server {
     pub ip: Option<String>,
     #[serde(default = "default_user")]
     pub user: String,
+    pub ssh_key: Option<String>,
 }
 
 fn default_user() -> String {

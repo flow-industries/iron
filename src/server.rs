@@ -6,6 +6,49 @@ use crate::config::{EnvConfig, FleetConfig, Server};
 use crate::ssh::SshPool;
 use crate::ui;
 
+fn expand_tilde(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return format!("{home}/{rest}");
+        }
+    }
+    path.to_string()
+}
+
+fn resolve_ssh_key(server_key: Option<&str>, fleet_key: Option<&str>) -> Result<String> {
+    if let Some(key) = server_key {
+        let expanded = expand_tilde(key);
+        if !Path::new(&expanded).exists() {
+            bail!("SSH public key not found: {expanded}");
+        }
+        return Ok(expanded);
+    }
+
+    if let Some(key) = fleet_key {
+        let expanded = expand_tilde(key);
+        if !Path::new(&expanded).exists() {
+            bail!("SSH public key not found: {expanded}");
+        }
+        return Ok(expanded);
+    }
+
+    let home = std::env::var("HOME").context("HOME not set")?;
+    let ed25519 = format!("{home}/.ssh/id_ed25519.pub");
+    if Path::new(&ed25519).exists() {
+        return Ok(ed25519);
+    }
+
+    let rsa = format!("{home}/.ssh/id_rsa.pub");
+    if Path::new(&rsa).exists() {
+        return Ok(rsa);
+    }
+
+    bail!(
+        "No SSH public key found. Provide ssh_key in fleet.toml, use --ssh-key, \
+         or ensure ~/.ssh/id_ed25519.pub or ~/.ssh/id_rsa.pub exists"
+    )
+}
+
 pub async fn run(config_path: &str, command: ServerCommand) -> Result<()> {
     match command {
         ServerCommand::Add {
@@ -14,7 +57,19 @@ pub async fn run(config_path: &str, command: ServerCommand) -> Result<()> {
             host,
             user,
             ssh_user,
-        } => add(config_path, &name, &ip, host.as_deref(), &user, &ssh_user).await,
+            ssh_key,
+        } => {
+            add(
+                config_path,
+                &name,
+                &ip,
+                host.as_deref(),
+                &user,
+                &ssh_user,
+                ssh_key.as_deref(),
+            )
+            .await
+        }
         ServerCommand::Remove { name } => remove(config_path, &name),
         ServerCommand::Check { name } => check(config_path, name.as_deref()).await,
     }
@@ -27,6 +82,7 @@ async fn add(
     host_override: Option<&str>,
     user: &str,
     ssh_user: &str,
+    cli_ssh_key: Option<&str>,
 ) -> Result<()> {
     let config_path = Path::new(config_path);
     let content = std::fs::read_to_string(config_path)
@@ -86,6 +142,8 @@ async fn add(
         );
     }
 
+    let resolved_key = resolve_ssh_key(cli_ssh_key, config.ssh_key.as_deref())?;
+
     ui::header("Ansible setup");
     let mut cmd = tokio::process::Command::new("ansible-playbook");
     cmd.arg("ansible/setup.yml")
@@ -93,6 +151,8 @@ async fn add(
         .arg(format!("{ip},"))
         .arg("-u")
         .arg(ssh_user)
+        .arg("-e")
+        .arg(format!("ssh_pub_key_path={resolved_key}"))
         .current_dir(config_path.parent().unwrap_or(Path::new(".")));
 
     if let Some(ref token) = ghcr_token {
@@ -108,7 +168,7 @@ async fn add(
         bail!("Ansible setup failed (exit code: {status})");
     }
 
-    write_server_to_config(config_path, name, &hostname, ip, user)?;
+    write_server_to_config(config_path, name, &hostname, ip, user, cli_ssh_key)?;
     ui::success(&format!("Server '{name}' added and bootstrapped"));
     Ok(())
 }
@@ -226,6 +286,7 @@ pub fn write_server_to_config(
     host: &str,
     ip: &str,
     user: &str,
+    ssh_key: Option<&str>,
 ) -> Result<()> {
     let content = std::fs::read_to_string(config_path)
         .with_context(|| format!("Failed to read {}", config_path.display()))?;
@@ -243,6 +304,9 @@ pub fn write_server_to_config(
     server_table.insert("host", toml_edit::value(host));
     server_table.insert("ip", toml_edit::value(ip));
     server_table.insert("user", toml_edit::value(user));
+    if let Some(key) = ssh_key {
+        server_table.insert("ssh_key", toml_edit::value(key));
+    }
     servers.insert(name, toml_edit::Item::Table(server_table));
 
     std::fs::write(config_path, doc.to_string())
