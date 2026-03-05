@@ -28,6 +28,7 @@ flow status --server flow-1
 # Tail logs
 flow logs site
 flow logs site -f
+flow logs site --server flow-1
 
 # Server management (creates DNS record, bootstraps via Ansible)
 flow server add fl-1 --ip 164.90.130.5
@@ -64,6 +65,7 @@ ansible-galaxy install -r ansible/requirements.yml
 ```
 src/
   main.rs       — entrypoint, CLI dispatch
+  lib.rs        — public module re-exports
   cli.rs        — clap derive structs
   config.rs     — Fleet/Server/App types, parse + merge + validate
   ssh.rs        — SSH connection pool (openssh crate, wraps system ssh)
@@ -72,9 +74,15 @@ src/
   cloudflare.rs — ensure DNS A records via Cloudflare API
   deploy.rs     — full deploy pipeline
   server.rs     — server add/remove/check (Ansible + toml_edit)
-  status.rs     — fleet-wide status and container info
+  status.rs     — fleet-wide status, container info, table display
   logs.rs       — tail logs from app
-  ui.rs         — spinner, table, colored output
+  ui.rs         — spinner, success/error/header output
+tests/
+  config.rs     — config parsing and validation
+  compose.rs    — compose generation
+  caddy.rs      — Caddy fragment generation
+  cloudflare.rs — Cloudflare API
+  server.rs     — server management
 ```
 
 ## Pre-push Checklist
@@ -97,7 +105,7 @@ cargo test
 
 ## Secrets
 
-`fleet.env.toml` (gitignored) holds all env vars — both secrets and non-secret config. `fleet.toml` contains no env vars. Required secrets: `DB_PASSWORD`, `BETTER_AUTH_SECRET`, `ghcr_token`, `cloudflare_api_token`.
+`fleet.env.toml` (gitignored) holds all env vars — both secrets and non-secret config. `fleet.toml` contains no env vars. Fleet-level secrets: `ghcr_token` (Docker image pulls), `cloudflare_api_token` (DNS management). App-level secrets like `DB_PASSWORD` go under `[apps.<name>]`.
 
 ### Comments: ABSOLUTE RULE
 

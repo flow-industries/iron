@@ -36,10 +36,12 @@ flow status --server flow-1
 # Tail logs
 flow logs site
 flow logs site -f
+flow logs site --server flow-1
 
 # Add a new server (creates DNS, bootstraps via Ansible)
 flow server add fl-2 --ip 164.90.130.5
 flow server add fl-2 --ip 164.90.130.5 --host custom.flow.industries
+flow server add fl-2 --ip 164.90.130.5 --ssh-user ubuntu
 
 # Remove a server
 flow server remove fl-2
@@ -90,6 +92,7 @@ WUD detects new image → docker compose pull → docker rollout (zero-downtime)
 ```
 src/
   main.rs         CLI entrypoint
+  lib.rs          public module re-exports
   cli.rs          clap command definitions
   config.rs       fleet.toml parsing and validation
   compose.rs      docker-compose.yml generation
@@ -101,11 +104,23 @@ src/
   status.rs       fleet status display
   logs.rs         log tailing
   ui.rs           terminal output helpers
+tests/
+  config.rs       config parsing and validation
+  compose.rs      compose generation
+  caddy.rs        Caddy fragment generation
+  cloudflare.rs   Cloudflare API
+  server.rs       server management
 ansible/
   setup.yml       server bootstrapping playbook
+  ansible.cfg     Ansible configuration
+  requirements.yml  Galaxy role dependencies
+  group_vars/     host group variables
 stacks/
-  caddy/          shared Caddy reverse proxy
-  wud/            WUD auto-deploy + rollout script
+  caddy/
+    docker-compose.yml  shared Caddy reverse proxy
+  wud/
+    docker-compose.yml  WUD auto-deploy watcher
+    rollout.sh          zero-downtime deploy script
 fleet.toml        server and app definitions
 fleet.env.toml    secrets and env vars (gitignored)
 ```
