@@ -141,39 +141,36 @@ fn validate(config: &FleetConfig) -> Result<()> {
 
     for (app_name, app) in &config.apps {
         if app.servers.is_empty() {
-            bail!("App '{}' has no servers", app_name);
+            bail!("App '{app_name}' has no servers");
         }
 
         if app.image.is_empty() {
-            bail!("App '{}' has an empty image", app_name);
+            bail!("App '{app_name}' has an empty image");
         }
 
         if app.routing.is_some() && app.port.is_none() {
-            bail!("App '{}' has routing but no port", app_name);
+            bail!("App '{app_name}' has routing but no port");
         }
 
         if !app.ports.is_empty() && app.routing.is_some() {
-            bail!(
-                "App '{}' has both routing and ports (mutually exclusive)",
-                app_name
-            );
+            bail!("App '{app_name}' has both routing and ports (mutually exclusive)");
         }
 
         if let Some(port) = app.port {
             if port == 0 {
-                bail!("App '{}' has invalid port 0", app_name);
+                bail!("App '{app_name}' has invalid port 0");
             }
         }
         for pm in &app.ports {
             if pm.internal == 0 || pm.external == 0 {
-                bail!("App '{}' has invalid port 0", app_name);
+                bail!("App '{app_name}' has invalid port 0");
             }
         }
 
         if let Some(ref routing) = app.routing {
             for route in &routing.routes {
                 if route.is_empty() {
-                    bail!("App '{}' has an empty route", app_name);
+                    bail!("App '{app_name}' has an empty route");
                 }
                 all_routes.push((route, app_name));
             }
@@ -204,12 +201,7 @@ fn validate(config: &FleetConfig) -> Result<()> {
     let mut seen_routes: HashMap<&str, &str> = HashMap::new();
     for (route, app_name) in &all_routes {
         if let Some(other_app) = seen_routes.get(route) {
-            bail!(
-                "Duplicate route '{}' in apps '{}' and '{}'",
-                route,
-                other_app,
-                app_name
-            );
+            bail!("Duplicate route '{route}' in apps '{other_app}' and '{app_name}'");
         }
         seen_routes.insert(route, app_name);
     }
@@ -221,8 +213,8 @@ pub fn load(config_path: &str) -> Result<Fleet> {
     let config_path = Path::new(config_path);
     let content = std::fs::read_to_string(config_path)
         .with_context(|| format!("Failed to read {}", config_path.display()))?;
-    let config: FleetConfig =
-        toml::from_str(&content).with_context(|| format!("Failed to parse {}", config_path.display()))?;
+    let config: FleetConfig = toml::from_str(&content)
+        .with_context(|| format!("Failed to parse {}", config_path.display()))?;
 
     let env_path = config_path.with_file_name("fleet.env.toml");
     let env_config: EnvConfig = if env_path.exists() {
@@ -237,11 +229,7 @@ pub fn load(config_path: &str) -> Result<Fleet> {
     for (app_name, app) in &config.apps {
         for server in &app.servers {
             if !config.servers.contains_key(server) {
-                bail!(
-                    "App '{}' references unknown server '{}'",
-                    app_name,
-                    server
-                );
+                bail!("App '{app_name}' references unknown server '{server}'");
             }
         }
     }

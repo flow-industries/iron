@@ -1,3 +1,7 @@
+#![allow(clippy::unwrap_used)]
+
+use std::collections::HashMap;
+
 use flow::caddy::generate;
 use flow::config::*;
 
@@ -14,7 +18,7 @@ fn generate_caddy_fragment() {
             health_path: Some("/health".to_string()),
             health_interval: Some("5s".to_string()),
         }),
-        env: Default::default(),
+        env: HashMap::default(),
         services: vec![],
         ports: vec![],
     };
@@ -35,7 +39,7 @@ fn no_fragment_without_routing() {
         port: None,
         deploy_strategy: DeployStrategy::Recreate,
         routing: None,
-        env: Default::default(),
+        env: HashMap::default(),
         services: vec![],
         ports: vec![],
     };
@@ -55,7 +59,7 @@ fn multiple_routes() {
             health_path: Some("/health".to_string()),
             health_interval: None,
         }),
-        env: Default::default(),
+        env: HashMap::default(),
         services: vec![],
         ports: vec![],
     };

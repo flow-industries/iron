@@ -35,17 +35,18 @@ async fn add(
         .with_context(|| format!("Failed to parse {}", config_path.display()))?;
 
     if config.servers.contains_key(name) {
-        bail!("Server '{}' already exists", name);
+        bail!("Server '{name}' already exists");
     }
 
-    let hostname = match host_override {
-        Some(h) => h.to_string(),
-        None => {
-            let domain = config.domain.as_deref().ok_or_else(|| {
-                anyhow::anyhow!("Cannot derive hostname: no 'domain' in fleet.toml (use --host to specify)")
-            })?;
-            format!("{}.{}", name, domain)
-        }
+    let hostname = if let Some(h) = host_override {
+        h.to_string()
+    } else {
+        let domain = config.domain.as_deref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Cannot derive hostname: no 'domain' in fleet.toml (use --host to specify)"
+            )
+        })?;
+        format!("{name}.{domain}")
     };
 
     let env_path = config_path.with_file_name("fleet.env.toml");
@@ -56,7 +57,10 @@ async fn add(
             .with_context(|| format!("Failed to parse {}", env_path.display()))?;
         (
             env_config.fleet.ghcr_token.filter(|t| !t.is_empty()),
-            env_config.fleet.cloudflare_api_token.filter(|t| !t.is_empty()),
+            env_config
+                .fleet
+                .cloudflare_api_token
+                .filter(|t| !t.is_empty()),
         )
     } else {
         (None, None)
@@ -66,12 +70,15 @@ async fn add(
         anyhow::anyhow!("Cannot create DNS record: cloudflare_api_token not set in fleet.env.toml")
     })?;
 
-    let sp = ui::spinner(&format!("Creating DNS record {} → {}...", hostname, ip));
+    let sp = ui::spinner(&format!("Creating DNS record {hostname} → {ip}..."));
     crate::cloudflare::ensure_dns_record(&cf_token, &hostname, ip).await?;
     sp.finish_and_clear();
-    ui::success(&format!("{} → {}", hostname, ip));
+    ui::success(&format!("{hostname} → {ip}"));
 
-    let ansible_dir = config_path.parent().unwrap_or(Path::new(".")).join("ansible");
+    let ansible_dir = config_path
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join("ansible");
     if !ansible_dir.join("setup.yml").exists() {
         bail!(
             "Ansible playbook not found at {}",
@@ -83,24 +90,27 @@ async fn add(
     let mut cmd = tokio::process::Command::new("ansible-playbook");
     cmd.arg("ansible/setup.yml")
         .arg("-i")
-        .arg(format!("{},", ip))
+        .arg(format!("{ip},"))
         .arg("-u")
         .arg(ssh_user)
         .current_dir(config_path.parent().unwrap_or(Path::new(".")));
 
     if let Some(ref token) = ghcr_token {
-        cmd.arg("-e").arg(format!("ghcr_token={}", token));
+        cmd.arg("-e").arg(format!("ghcr_token={token}"));
     }
 
-    let status = cmd.status().await.context("Failed to run ansible-playbook")?;
+    let status = cmd
+        .status()
+        .await
+        .context("Failed to run ansible-playbook")?;
     sp.finish_and_clear();
 
     if !status.success() {
-        bail!("Ansible setup failed (exit code: {})", status);
+        bail!("Ansible setup failed (exit code: {status})");
     }
 
     write_server_to_config(config_path, name, &hostname, ip, user)?;
-    ui::success(&format!("Server '{}' added and bootstrapped", name));
+    ui::success(&format!("Server '{name}' added and bootstrapped"));
     Ok(())
 }
 
@@ -113,7 +123,7 @@ fn remove(config_path: &str, name: &str) -> Result<()> {
         .with_context(|| format!("Failed to parse {}", config_path.display()))?;
 
     if !config.servers.contains_key(name) {
-        bail!("Server '{}' does not exist", name);
+        bail!("Server '{name}' does not exist");
     }
 
     let referencing_apps: Vec<&String> = config
@@ -133,7 +143,7 @@ fn remove(config_path: &str, name: &str) -> Result<()> {
     }
 
     remove_server_from_config(config_path, name)?;
-    ui::success(&format!("Server '{}' removed", name));
+    ui::success(&format!("Server '{name}' removed"));
     Ok(())
 }
 
@@ -144,7 +154,7 @@ async fn check(config_path: &str, name: Option<&str>) -> Result<()> {
         let server = fleet
             .servers
             .get(name)
-            .with_context(|| format!("Server '{}' not found", name))?;
+            .with_context(|| format!("Server '{name}' not found"))?;
         vec![(name.to_string(), server.clone())]
     } else {
         fleet
@@ -167,15 +177,33 @@ async fn check(config_path: &str, name: Option<&str>) -> Result<()> {
                 pool
             }
             Err(e) => {
-                ui::error(&format!("SSH connection: {}", e));
+                ui::error(&format!("SSH connection: {e}"));
                 continue;
             }
         };
 
-        run_check(&pool, name, "Docker running", "docker info --format '{{.ServerVersion}}'").await;
-        run_check(&pool, name, "docker-rollout", "test -x /usr/libexec/docker/cli-plugins/docker-rollout").await;
+        run_check(
+            &pool,
+            name,
+            "Docker running",
+            "docker info --format '{{.ServerVersion}}'",
+        )
+        .await;
+        run_check(
+            &pool,
+            name,
+            "docker-rollout",
+            "test -x /usr/libexec/docker/cli-plugins/docker-rollout",
+        )
+        .await;
         run_check(&pool, name, "Deploy directory", "test -d /opt/flow").await;
-        run_check(&pool, name, "Flow network", "docker network inspect flow --format '{{.Name}}'").await;
+        run_check(
+            &pool,
+            name,
+            "Flow network",
+            "docker network inspect flow --format '{{.Name}}'",
+        )
+        .await;
 
         let _ = pool.close().await;
     }
@@ -190,7 +218,13 @@ async fn run_check(pool: &SshPool, server: &str, label: &str, cmd: &str) {
     }
 }
 
-pub fn write_server_to_config(config_path: &Path, name: &str, host: &str, ip: &str, user: &str) -> Result<()> {
+pub fn write_server_to_config(
+    config_path: &Path,
+    name: &str,
+    host: &str,
+    ip: &str,
+    user: &str,
+) -> Result<()> {
     let content = std::fs::read_to_string(config_path)
         .with_context(|| format!("Failed to read {}", config_path.display()))?;
     let mut doc = content

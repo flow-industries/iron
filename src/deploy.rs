@@ -12,16 +12,14 @@ pub async fn run(fleet: &Fleet, app_filter: Option<&str>) -> Result<()> {
         let app = fleet
             .apps
             .get(name)
-            .ok_or_else(|| anyhow::anyhow!("Unknown app: {}", name))?;
+            .ok_or_else(|| anyhow::anyhow!("Unknown app: {name}"))?;
         vec![app]
     } else {
         fleet.apps.values().collect()
     };
 
-    let needed_servers: std::collections::HashSet<_> = apps
-        .iter()
-        .flat_map(|a| a.servers.iter())
-        .collect();
+    let needed_servers: std::collections::HashSet<_> =
+        apps.iter().flat_map(|a| a.servers.iter()).collect();
 
     let servers_to_connect: std::collections::HashMap<_, _> = fleet
         .servers
@@ -56,48 +54,48 @@ async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool) -> Result<
     let caddy_fragment = caddy::generate(app);
 
     for server_name in &app.servers {
-        let sp = ui::spinner(&format!("  {} → uploading files...", server_name));
+        let sp = ui::spinner(&format!("  {server_name} → uploading files..."));
 
         let app_dir = format!("/opt/flow/{}", app.name);
 
-        pool.exec(server_name, &format!("sudo mkdir -p {}", app_dir))
+        pool.exec(server_name, &format!("sudo mkdir -p {app_dir}"))
             .await?;
 
-        let compose_path = format!("{}/docker-compose.yml", app_dir);
+        let compose_path = format!("{app_dir}/docker-compose.yml");
         pool.upload_file(server_name, &compose_path, &compose_yaml)
             .await?;
 
         if !env_content.trim().is_empty() {
-            let env_path = format!("{}/.env", app_dir);
+            let env_path = format!("{app_dir}/.env");
             pool.upload_file(server_name, &env_path, &env_content)
                 .await?;
-            pool.exec(server_name, &format!("chmod 600 {}", env_path))
+            pool.exec(server_name, &format!("chmod 600 {env_path}"))
                 .await?;
         }
 
         sp.finish_and_clear();
 
-        let sp = ui::spinner(&format!("  {} → pulling images...", server_name));
-        pool.exec(
-            server_name,
-            &format!("cd {} && docker compose pull", app_dir),
-        )
-        .await?;
+        let sp = ui::spinner(&format!("  {server_name} → pulling images..."));
+        pool.exec(server_name, &format!("cd {app_dir} && docker compose pull"))
+            .await?;
         sp.finish_and_clear();
 
-        let sp = ui::spinner(&format!("  {} → deploying...", server_name));
+        let sp = ui::spinner(&format!("  {server_name} → deploying..."));
         match app.deploy_strategy {
             DeployStrategy::Rolling => {
                 pool.exec(
                     server_name,
-                    &format!("docker rollout {} -f {}/docker-compose.yml", app.name, app_dir),
+                    &format!(
+                        "docker rollout {} -f {}/docker-compose.yml",
+                        app.name, app_dir
+                    ),
                 )
                 .await?;
             }
             DeployStrategy::Recreate => {
                 pool.exec(
                     server_name,
-                    &format!("cd {} && docker compose up -d", app_dir),
+                    &format!("cd {app_dir} && docker compose up -d"),
                 )
                 .await?;
             }
@@ -105,9 +103,9 @@ async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool) -> Result<
         sp.finish_and_clear();
 
         if let Some(ref fragment) = caddy_fragment {
-            let sp = ui::spinner(&format!("  {} → updating Caddy...", server_name));
+            let sp = ui::spinner(&format!("  {server_name} → updating Caddy..."));
             let caddy_sites_dir = "/opt/flow/caddy/sites";
-            pool.exec(server_name, &format!("sudo mkdir -p {}", caddy_sites_dir))
+            pool.exec(server_name, &format!("sudo mkdir -p {caddy_sites_dir}"))
                 .await?;
             let caddy_path = format!("{}/{}", caddy_sites_dir, app.name);
             pool.upload_file(server_name, &caddy_path, fragment).await?;

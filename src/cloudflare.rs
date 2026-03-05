@@ -49,7 +49,7 @@ pub async fn ensure_dns_record(api_token: &str, hostname: &str, ip: &str) -> Res
 
     let zone_id = get_zone_id(&client, api_token, &zone_name)
         .await
-        .with_context(|| format!("Failed to find Cloudflare zone for {}", zone_name))?;
+        .with_context(|| format!("Failed to find Cloudflare zone for {zone_name}"))?;
 
     let existing = get_record(&client, api_token, &zone_id, hostname).await?;
 
@@ -73,7 +73,7 @@ pub async fn ensure_dns_record(api_token: &str, hostname: &str, ip: &str) -> Res
             }
         }
         None => {
-            let url = format!("{}/zones/{}/dns_records", CF_API, zone_id);
+            let url = format!("{CF_API}/zones/{zone_id}/dns_records");
             let resp: CfResponse<serde_json::Value> = client
                 .post(&url)
                 .bearer_auth(api_token)
@@ -108,12 +108,8 @@ pub fn extract_zone(hostname: &str) -> String {
     }
 }
 
-async fn get_zone_id(
-    client: &reqwest::Client,
-    api_token: &str,
-    zone_name: &str,
-) -> Result<String> {
-    let url = format!("{}/zones?name={}", CF_API, zone_name);
+async fn get_zone_id(client: &reqwest::Client, api_token: &str, zone_name: &str) -> Result<String> {
+    let url = format!("{CF_API}/zones?name={zone_name}");
     let resp: CfResponse<Vec<Zone>> = client
         .get(&url)
         .bearer_auth(api_token)
@@ -122,7 +118,7 @@ async fn get_zone_id(
         .json()
         .await?;
     if !resp.success || resp.result.is_empty() {
-        anyhow::bail!("Zone '{}' not found in Cloudflare", zone_name);
+        anyhow::bail!("Zone '{zone_name}' not found in Cloudflare");
     }
     Ok(resp.result[0].id.clone())
 }
@@ -133,10 +129,7 @@ async fn get_record(
     zone_id: &str,
     hostname: &str,
 ) -> Result<Option<DnsRecord>> {
-    let url = format!(
-        "{}/zones/{}/dns_records?type=A&name={}",
-        CF_API, zone_id, hostname
-    );
+    let url = format!("{CF_API}/zones/{zone_id}/dns_records?type=A&name={hostname}");
     let resp: CfResponse<Vec<DnsRecord>> = client
         .get(&url)
         .bearer_auth(api_token)

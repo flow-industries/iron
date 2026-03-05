@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use flow::config::*;
 
 #[test]
@@ -70,8 +72,14 @@ external = 9999
 protocol = "tcp"
 "#;
     let config: FleetConfig = toml::from_str(toml_str).unwrap();
-    assert_eq!(config.apps["site"].routing.as_ref().unwrap().routes, vec!["flow.industries"]);
-    assert_eq!(config.apps["game-server"].deploy_strategy, DeployStrategy::Recreate);
+    assert_eq!(
+        config.apps["site"].routing.as_ref().unwrap().routes,
+        vec!["flow.industries"]
+    );
+    assert_eq!(
+        config.apps["game-server"].deploy_strategy,
+        DeployStrategy::Recreate
+    );
     assert_eq!(config.apps["game-server"].ports[0].external, 9999);
 }
 
@@ -101,7 +109,10 @@ depends_on = "postgres"
     let auth = &config.apps["auth"];
     assert_eq!(auth.services.len(), 2);
     assert_eq!(auth.services[0].name, "postgres");
-    assert_eq!(auth.services[0].healthcheck, Some("pg_isready -U flow -d flow_auth".to_string()));
+    assert_eq!(
+        auth.services[0].healthcheck,
+        Some("pg_isready -U flow -d flow_auth".to_string())
+    );
     assert_eq!(auth.services[1].depends_on, Some("postgres".to_string()));
 }
 
@@ -175,7 +186,12 @@ routes = ["example.com"]
     std::fs::write(&path, toml_str).unwrap();
     let result = load(path.to_str().unwrap());
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("routing but no port"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("routing but no port")
+    );
 }
 
 #[test]
@@ -201,7 +217,12 @@ external = 9999
     std::fs::write(&path, toml_str).unwrap();
     let result = load(path.to_str().unwrap());
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("mutually exclusive"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("mutually exclusive")
+    );
 }
 
 #[test]
@@ -304,7 +325,9 @@ fn env_loaded_from_env_config() {
     let fleet_path = dir.path().join("fleet.toml");
     let env_path = dir.path().join("fleet.env.toml");
 
-    std::fs::write(&fleet_path, r#"
+    std::fs::write(
+        &fleet_path,
+        r#"
 [servers.flow-1]
 host = "flow-1.example.com"
 
@@ -312,13 +335,19 @@ host = "flow-1.example.com"
 image = "nginx:latest"
 servers = ["flow-1"]
 port = 3000
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
-    std::fs::write(&env_path, r#"
+    std::fs::write(
+        &env_path,
+        r#"
 [apps.web]
 NODE_ENV = "production"
 SECRET_KEY = "abc123"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let fleet = load(fleet_path.to_str().unwrap()).unwrap();
     let web = &fleet.apps["web"];

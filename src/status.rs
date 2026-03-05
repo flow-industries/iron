@@ -1,5 +1,5 @@
 use anyhow::Result;
-use comfy_table::{Table, presets::UTF8_FULL_CONDENSED, modifiers::UTF8_ROUND_CORNERS};
+use comfy_table::{Table, modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL_CONDENSED};
 use console::style;
 use std::collections::HashMap;
 
@@ -23,8 +23,8 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
     let pool = SshPool::connect(&filtered).await?;
     sp.finish_and_clear();
 
-    for (name, _server) in &filtered {
-        ui::header(&format!("Server: {}", name));
+    for name in filtered.keys() {
+        ui::header(&format!("Server: {name}"));
 
         let output = pool
             .exec(

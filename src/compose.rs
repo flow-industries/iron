@@ -11,7 +11,7 @@ pub fn generate(app: &ResolvedApp) -> String {
         let mut keys: Vec<_> = app.env.keys().collect();
         keys.sort();
         for key in keys {
-            out.push_str(&format!("      {}: ${{{}}}\n", key, key));
+            out.push_str(&format!("      {key}: ${{{key}}}\n"));
         }
     }
 
@@ -23,7 +23,10 @@ pub fn generate(app: &ResolvedApp) -> String {
             if p.protocol == "tcp" {
                 out.push_str(&format!("      - \"{}:{}\"\n", p.external, p.internal));
             } else {
-                out.push_str(&format!("      - \"{}:{}/{}\"\n", p.external, p.internal, p.protocol));
+                out.push_str(&format!(
+                    "      - \"{}:{}/{}\"\n",
+                    p.external, p.internal, p.protocol
+                ));
             }
         }
     }
@@ -41,15 +44,14 @@ pub fn generate(app: &ResolvedApp) -> String {
     out.push_str("    labels:\n");
     out.push_str("      - \"wud.watch=true\"\n");
     out.push_str("      - \"wud.watch.digest=true\"\n");
-    out.push_str(&format!("      - \"wud.trigger.include={}\"\n", wud_trigger));
+    out.push_str(&format!("      - \"wud.trigger.include={wud_trigger}\"\n"));
 
     if let Some(ref routing) = app.routing {
         if let Some(ref health_path) = routing.health_path {
             let port = app.port.unwrap_or(3000);
             out.push_str("    healthcheck:\n");
             out.push_str(&format!(
-                "      test: [\"CMD\", \"wget\", \"--spider\", \"-q\", \"http://localhost:{}{}\"]\n",
-                port, health_path
+                "      test: [\"CMD\", \"wget\", \"--spider\", \"-q\", \"http://localhost:{port}{health_path}\"]\n"
             ));
             out.push_str("      interval: 10s\n");
             out.push_str("      timeout: 5s\n");
@@ -83,14 +85,14 @@ pub fn generate(app: &ResolvedApp) -> String {
             let mut keys: Vec<_> = svc.env.keys().collect();
             keys.sort();
             for key in keys {
-                out.push_str(&format!("      {}: ${{{}}}\n", key, key));
+                out.push_str(&format!("      {key}: ${{{key}}}\n"));
             }
         }
 
         if !svc.volumes.is_empty() {
             out.push_str("    volumes:\n");
             for vol in &svc.volumes {
-                out.push_str(&format!("      - {}\n", vol));
+                out.push_str(&format!("      - {vol}\n"));
             }
         }
 
@@ -103,10 +105,7 @@ pub fn generate(app: &ResolvedApp) -> String {
 
         if let Some(ref hc) = svc.healthcheck {
             out.push_str("    healthcheck:\n");
-            out.push_str(&format!(
-                "      test: [\"CMD-SHELL\", \"{}\"]\n",
-                hc
-            ));
+            out.push_str(&format!("      test: [\"CMD-SHELL\", \"{hc}\"]\n"));
             out.push_str("      interval: 5s\n");
             out.push_str("      timeout: 5s\n");
             out.push_str("      retries: 5\n");
@@ -114,12 +113,15 @@ pub fn generate(app: &ResolvedApp) -> String {
 
         if let Some(ref dep) = svc.depends_on {
             out.push_str("    depends_on:\n");
-            let dep_has_healthcheck = app.services.iter().any(|s| s.name == *dep && s.healthcheck.is_some());
+            let dep_has_healthcheck = app
+                .services
+                .iter()
+                .any(|s| s.name == *dep && s.healthcheck.is_some());
             if dep_has_healthcheck {
-                out.push_str(&format!("      {}:\n", dep));
+                out.push_str(&format!("      {dep}:\n"));
                 out.push_str("        condition: service_healthy\n");
             } else {
-                out.push_str(&format!("      - {}\n", dep));
+                out.push_str(&format!("      - {dep}\n"));
             }
         }
     }
@@ -144,7 +146,7 @@ pub fn generate(app: &ResolvedApp) -> String {
     if !named_volumes.is_empty() {
         out.push_str("\nvolumes:\n");
         for vol in &named_volumes {
-            out.push_str(&format!("  {}:\n", vol));
+            out.push_str(&format!("  {vol}:\n"));
         }
     }
 

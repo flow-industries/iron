@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use flow::compose::{generate, generate_env};
 use flow::config::*;
 
