@@ -47,6 +47,36 @@ pub enum Command {
         server: Option<String>,
     },
 
+    /// Stop an app's containers (keeps config, files, and DNS intact)
+    Stop {
+        /// App name to stop
+        app: String,
+
+        /// Stop only on this server (defaults to all assigned servers)
+        #[arg(long)]
+        server: Option<String>,
+    },
+
+    /// Restart an app's containers without redeploying
+    Restart {
+        /// App name to restart
+        app: String,
+
+        /// Restart only on this server (defaults to all assigned servers)
+        #[arg(long)]
+        server: Option<String>,
+    },
+
+    /// Remove an app: stop containers, clean up files, DNS, and fleet.toml
+    Remove {
+        /// App name to remove
+        app: String,
+
+        /// Skip confirmation prompt
+        #[arg(long)]
+        yes: bool,
+    },
+
     /// Initialize a new fleet.toml in the current directory
     Init,
 

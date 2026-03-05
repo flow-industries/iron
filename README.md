@@ -40,6 +40,18 @@ flow status --server flow-1
 flow check
 flow check --server flow-1
 
+# Stop an app (keeps config, files, and DNS intact)
+flow stop site
+flow stop site --server flow-1
+
+# Restart an app's containers
+flow restart site
+flow restart site --server flow-1
+
+# Remove an app (tears down everything + removes from fleet.toml)
+flow remove site
+flow remove site --yes
+
 # Tail logs
 flow logs site
 flow logs site -f
@@ -106,6 +118,9 @@ src/
   caddy.rs        Caddy reverse proxy fragments
   cloudflare.rs   DNS A record management
   deploy.rs       full deploy pipeline
+  stop.rs         stop app containers
+  restart.rs      restart app containers
+  remove.rs       remove app (teardown + config cleanup)
   check.rs        verify fleet.toml matches server reality
   init.rs         initialize new fleet.toml
   server.rs       server add/remove/check
