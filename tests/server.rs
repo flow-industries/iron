@@ -13,7 +13,15 @@ fn add_writes_server_to_fleet_toml() {
     )
     .unwrap();
 
-    write_server_to_config(&path, "new-server", "new.example.com", "10.0.0.1", "deploy").unwrap();
+    write_server_to_config(
+        &path,
+        "new-server",
+        "new.example.com",
+        "10.0.0.1",
+        "deploy",
+        None,
+    )
+    .unwrap();
 
     let content = std::fs::read_to_string(&path).unwrap();
     let config: FleetConfig = toml::from_str(&content).unwrap();
@@ -24,6 +32,7 @@ fn add_writes_server_to_fleet_toml() {
         Some("10.0.0.1".to_string())
     );
     assert_eq!(config.servers["new-server"].user, "deploy");
+    assert_eq!(config.servers["new-server"].ssh_key, None);
 }
 
 #[test]
@@ -45,7 +54,15 @@ port = 3000
     )
     .unwrap();
 
-    write_server_to_config(&path, "flow-2", "flow-2.example.com", "10.0.0.2", "deploy").unwrap();
+    write_server_to_config(
+        &path,
+        "flow-2",
+        "flow-2.example.com",
+        "10.0.0.2",
+        "deploy",
+        None,
+    )
+    .unwrap();
 
     let content = std::fs::read_to_string(&path).unwrap();
     let config: FleetConfig = toml::from_str(&content).unwrap();
@@ -77,6 +94,7 @@ user = "deploy"
             host: None,
             user: "deploy".to_string(),
             ssh_user: "root".to_string(),
+            ssh_key: None,
         },
     ));
     assert!(result.is_err());
@@ -162,4 +180,32 @@ host = "flow-1.example.com"
     ));
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("does not exist"));
+}
+
+#[test]
+fn add_writes_server_with_ssh_key() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(
+        &path,
+        "[servers.existing]\nhost = \"existing.example.com\"\nuser = \"deploy\"\n",
+    )
+    .unwrap();
+
+    write_server_to_config(
+        &path,
+        "new-server",
+        "new.example.com",
+        "10.0.0.1",
+        "deploy",
+        Some("~/.ssh/custom.pub"),
+    )
+    .unwrap();
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    let config: FleetConfig = toml::from_str(&content).unwrap();
+    assert_eq!(
+        config.servers["new-server"].ssh_key,
+        Some("~/.ssh/custom.pub".to_string())
+    );
 }

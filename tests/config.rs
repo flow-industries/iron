@@ -604,6 +604,59 @@ routes = ["localhost"]
 }
 
 #[test]
+fn parse_server_ssh_key() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+ssh_key = "~/.ssh/custom_key.pub"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 80
+"#;
+    let config: FleetConfig = toml::from_str(toml_str).unwrap();
+    assert_eq!(
+        config.servers["flow-1"].ssh_key,
+        Some("~/.ssh/custom_key.pub".to_string())
+    );
+}
+
+#[test]
+fn parse_fleet_ssh_key() {
+    let toml_str = r#"
+ssh_key = "~/.ssh/fleet_key.pub"
+
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 80
+"#;
+    let config: FleetConfig = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.ssh_key, Some("~/.ssh/fleet_key.pub".to_string()));
+    assert_eq!(config.servers["flow-1"].ssh_key, None);
+}
+
+#[test]
+fn parse_ssh_key_defaults_to_none() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 80
+"#;
+    let config: FleetConfig = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.ssh_key, None);
+    assert_eq!(config.servers["flow-1"].ssh_key, None);
+}
+
+#[test]
 fn validate_duplicate_sidecar_names() {
     let toml_str = r#"
 [servers.flow-1]

@@ -76,6 +76,10 @@ pub enum ServerCommand {
         /// SSH user for initial Ansible connection
         #[arg(long, default_value = "root")]
         ssh_user: String,
+
+        /// Path to SSH public key for the deploy user
+        #[arg(long)]
+        ssh_key: Option<String>,
     },
 
     /// Remove a server from fleet.toml
