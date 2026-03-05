@@ -354,3 +354,283 @@ SECRET_KEY = "abc123"
     assert_eq!(web.env.get("NODE_ENV").unwrap(), "production");
     assert_eq!(web.env.get("SECRET_KEY").unwrap(), "abc123");
 }
+
+#[test]
+fn validate_server_invalid_ip() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+ip = "256.1.1.1"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 3000
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("invalid IP"));
+}
+
+#[test]
+fn validate_server_ip_not_a_number() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+ip = "not-an-ip"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 3000
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("invalid IP"));
+}
+
+#[test]
+fn validate_server_ip_none_is_valid() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 3000
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_port_protocol_invalid() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.game]
+image = "game:latest"
+servers = ["flow-1"]
+
+[[apps.game.ports]]
+internal = 9999
+external = 9999
+protocol = "invalid"
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid port protocol")
+    );
+}
+
+#[test]
+fn validate_port_protocol_udp() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.game]
+image = "game:latest"
+servers = ["flow-1"]
+
+[[apps.game.ports]]
+internal = 9999
+external = 9999
+protocol = "udp"
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_health_path_no_leading_slash() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 3000
+
+[apps.web.routing]
+routes = ["example.com"]
+health_path = "health"
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("health_path"));
+    assert!(err.contains("must start with /"));
+}
+
+#[test]
+fn validate_health_interval_invalid() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 3000
+
+[apps.web.routing]
+routes = ["example.com"]
+health_interval = "five-seconds"
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("health_interval"));
+}
+
+#[test]
+fn validate_health_interval_valid_formats() {
+    for interval in &["5s", "500ms", "1m", "1.5s", "2h", "1d"] {
+        let toml_str = format!(
+            r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 3000
+
+[apps.web.routing]
+routes = ["example.com"]
+health_interval = "{interval}"
+"#
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("fleet.toml");
+        std::fs::write(&path, &toml_str).unwrap();
+        let result = load(path.to_str().unwrap());
+        assert!(result.is_ok(), "Expected '{interval}' to be valid");
+    }
+}
+
+#[test]
+fn validate_route_with_whitespace() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 3000
+
+[apps.web.routing]
+routes = ["flow .industries"]
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("whitespace"));
+}
+
+#[test]
+fn validate_route_with_protocol() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 3000
+
+[apps.web.routing]
+routes = ["https://flow.industries"]
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("protocol prefix"));
+}
+
+#[test]
+fn validate_route_no_dot() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 3000
+
+[apps.web.routing]
+routes = ["localhost"]
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("no domain"));
+}
+
+#[test]
+fn validate_duplicate_sidecar_names() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.auth]
+image = "auth:latest"
+servers = ["flow-1"]
+port = 3000
+
+[[apps.auth.services]]
+name = "postgres"
+image = "postgres:17"
+
+[[apps.auth.services]]
+name = "postgres"
+image = "postgres:16"
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("duplicate service name")
+    );
+}
