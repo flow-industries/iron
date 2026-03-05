@@ -49,6 +49,17 @@ flow logs site
 flow logs site -f
 flow logs site --server flow-1
 
+# App management (modifies fleet.toml only, run flow deploy afterward)
+flow app add site --image ghcr.io/org/site:latest --server flow-1 --port 3000 \
+    --route flow.industries --health-path /health --health-interval 5s
+flow app add worker --image ghcr.io/org/worker:latest --server flow-1
+flow app add game --image ghcr.io/org/game:latest --server game-1 \
+    --deploy-strategy recreate --port-map 9999:9999/tcp
+flow app add-service auth postgres --image postgres:17 \
+    --volume pgdata:/var/lib/postgresql/data --healthcheck "pg_isready -U flow"
+flow app add-service auth backup --image backup:latest --depends-on postgres
+flow app remove-service auth backup
+
 # Server management (creates DNS record, bootstraps via Ansible)
 flow server add fl-1 --ip 164.90.130.5
 flow server add fl-1 --ip 164.90.130.5 --host custom.flow.industries
@@ -97,6 +108,7 @@ src/
   remove.rs     — remove app (teardown + fleet.toml cleanup)
   check.rs      — verify containers, Caddy, stale apps, DNS
   init.rs       — initialize new fleet.toml
+  app.rs        — app add, add-service, remove-service (toml_edit)
   server.rs     — server add/remove/check (Ansible + toml_edit)
   status.rs     — fleet-wide status, container info, table display
   logs.rs       — tail logs from app
@@ -107,6 +119,7 @@ tests/
   caddy.rs      — Caddy fragment generation
   cloudflare.rs — Cloudflare API
   init.rs       — init command
+  app.rs        — app management
   server.rs     — server management
 ```
 

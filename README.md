@@ -48,6 +48,18 @@ flow stop site --server flow-1
 flow restart site
 flow restart site --server flow-1
 
+# Add an app to fleet.toml (then run flow deploy <app>)
+flow app add site --image ghcr.io/org/site:latest --server flow-1 --port 3000 \
+    --route flow.industries --health-path /health
+flow app add worker --image ghcr.io/org/worker:latest --server flow-1
+flow app add game --image ghcr.io/org/game:latest --server game-1 \
+    --deploy-strategy recreate --port-map 9999:9999/tcp
+
+# Add/remove sidecar services
+flow app add-service auth postgres --image postgres:17 \
+    --volume pgdata:/var/lib/postgresql/data --healthcheck "pg_isready -U flow"
+flow app remove-service auth postgres
+
 # Remove an app (tears down everything + removes from fleet.toml)
 flow remove site
 flow remove site --yes
@@ -102,7 +114,7 @@ WUD detects new image → docker compose pull → docker rollout (zero-downtime)
 ## Adding a Service
 
 1. Create service repo with Dockerfile + CI pushing to GHCR
-2. Add `[apps.<name>]` to `fleet.toml` with image, server, port, routing
+2. `flow app add <name> --image ghcr.io/org/<name>:latest --server <srv> --port 3000 --route <domain>`
 3. Add env vars to `fleet.env.toml` if needed
 4. Run `flow deploy <name>`
 
@@ -123,6 +135,7 @@ src/
   remove.rs       remove app (teardown + config cleanup)
   check.rs        verify fleet.toml matches server reality
   init.rs         initialize new fleet.toml
+  app.rs          app add, add-service, remove-service
   server.rs       server add/remove/check
   ssh.rs          SSH connection pool
   status.rs       fleet status display
@@ -134,6 +147,7 @@ tests/
   caddy.rs        Caddy fragment generation
   cloudflare.rs   Cloudflare API
   init.rs         init command
+  app.rs          app management
   server.rs       server management
 ansible/
   setup.yml       server bootstrapping playbook
