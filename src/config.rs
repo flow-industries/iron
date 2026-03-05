@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::net::Ipv4Addr;
 use std::path::Path;
 
 #[derive(Debug, Deserialize)]
@@ -143,7 +144,24 @@ pub struct ResolvedSidecar {
     pub depends_on: Option<String>,
 }
 
+fn is_valid_caddy_duration(s: &str) -> bool {
+    for suffix in &["ms", "s", "m", "h", "d"] {
+        if let Some(num_part) = s.strip_suffix(suffix) {
+            return !num_part.is_empty() && num_part.parse::<f64>().is_ok();
+        }
+    }
+    false
+}
+
 fn validate(config: &FleetConfig) -> Result<()> {
+    for (server_name, server) in &config.servers {
+        if let Some(ref ip) = server.ip {
+            if ip.parse::<Ipv4Addr>().is_err() {
+                bail!("Server '{server_name}' has invalid IP '{ip}'");
+            }
+        }
+    }
+
     let mut all_routes: Vec<(&str, &str)> = Vec::new();
 
     for (app_name, app) in &config.apps {
@@ -172,6 +190,12 @@ fn validate(config: &FleetConfig) -> Result<()> {
             if pm.internal == 0 || pm.external == 0 {
                 bail!("App '{app_name}' has invalid port 0");
             }
+            if pm.protocol != "tcp" && pm.protocol != "udp" {
+                bail!(
+                    "App '{app_name}' has invalid port protocol '{}' (must be tcp or udp)",
+                    pm.protocol
+                );
+            }
         }
 
         if let Some(ref routing) = app.routing {
@@ -179,11 +203,44 @@ fn validate(config: &FleetConfig) -> Result<()> {
                 if route.is_empty() {
                     bail!("App '{app_name}' has an empty route");
                 }
+                if route.contains(char::is_whitespace) {
+                    bail!("App '{app_name}' has route '{route}' containing whitespace");
+                }
+                if route.contains("://") {
+                    bail!(
+                        "App '{app_name}' has route '{route}' with protocol prefix (use bare hostname)"
+                    );
+                }
+                if !route.contains('.') {
+                    bail!(
+                        "App '{app_name}' has route '{route}' with no domain (expected hostname like example.com)"
+                    );
+                }
                 all_routes.push((route, app_name));
+            }
+            if let Some(ref health_path) = routing.health_path {
+                if !health_path.starts_with('/') {
+                    bail!(
+                        "App '{app_name}' has invalid health_path '{health_path}' (must start with /)"
+                    );
+                }
+            }
+            if let Some(ref health_interval) = routing.health_interval {
+                if !is_valid_caddy_duration(health_interval) {
+                    bail!(
+                        "App '{app_name}' has invalid health_interval '{health_interval}' (expected format: 5s, 1m, 500ms)"
+                    );
+                }
             }
         }
 
         let sidecar_names: Vec<&str> = app.services.iter().map(|s| s.name.as_str()).collect();
+        let mut seen_sidecar_names: HashSet<&str> = HashSet::new();
+        for name in &sidecar_names {
+            if !seen_sidecar_names.insert(name) {
+                bail!("App '{app_name}' has duplicate service name '{name}'");
+            }
+        }
         for svc in &app.services {
             if svc.image.is_empty() {
                 bail!(
