@@ -15,7 +15,11 @@ async fn main() -> Result<()> {
             let fleet = flow::config::load(&cli.config)?;
             flow::status::run(&fleet, server.as_deref()).await
         }
-        Command::Logs { app, follow, server } => {
+        Command::Logs {
+            app,
+            follow,
+            server,
+        } => {
             let fleet = flow::config::load(&cli.config)?;
             flow::logs::run(&fleet, &app, follow, server.as_deref()).await
         }

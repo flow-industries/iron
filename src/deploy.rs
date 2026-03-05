@@ -36,7 +36,10 @@ pub async fn run(fleet: &Fleet, app_filter: Option<&str>) -> Result<()> {
     for server_name in &needed_servers {
         pool.exec(
             server_name,
-            &format!("docker network create {} 2>/dev/null || true", fleet.network),
+            &format!(
+                "docker network create {} 2>/dev/null || true",
+                fleet.network
+            ),
         )
         .await?;
     }
