@@ -27,21 +27,30 @@ pub async fn run(config_path: &str) -> Result<()> {
         if let Some(token) =
             ui::prompt_secret("Cloudflare API token (skip to set later with `flow login cf`):")
         {
-            let sp = ui::spinner("Validating token...");
-            match crate::cloudflare::verify_token(&token).await {
-                Ok(()) => {
-                    sp.finish_and_clear();
-                    ui::success("Token is valid");
-                    let env_path = Path::new(config_path).with_file_name("fleet.env.toml");
-                    crate::login::save_cloudflare_token(&env_path, &token)?;
-                }
-                Err(e) => {
-                    sp.finish_and_clear();
-                    ui::error(&format!("Token validation failed: {e}"));
-                    ui::error("Set it later with `flow login cf`");
-                }
-            }
+            let env_path = Path::new(config_path).with_file_name("fleet.env.toml");
+            validate_and_save_token(
+                &token,
+                crate::cloudflare::verify_token(&token),
+                &env_path,
+                "cloudflare_api_token",
+                "flow login cf",
+            )
+            .await;
         }
+    }
+
+    if let Some(token) =
+        ui::prompt_secret("GitHub token for GHCR (skip to set later with `flow login gh`):")
+    {
+        let env_path = Path::new(config_path).with_file_name("fleet.env.toml");
+        validate_and_save_token(
+            &token,
+            verify_gh(&token),
+            &env_path,
+            "ghcr_token",
+            "flow login gh",
+        )
+        .await;
     }
 
     let mut server_names: Vec<String> = Vec::new();
@@ -128,4 +137,42 @@ pub async fn run(config_path: &str) -> Result<()> {
     std::fs::write(path, doc.to_string())?;
     ui::success(&format!("Created {config_path}"));
     Ok(())
+}
+
+async fn verify_gh(token: &str) -> Result<()> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .get("https://api.github.com/user")
+        .header("User-Agent", "flow-iron")
+        .bearer_auth(token)
+        .send()
+        .await?;
+    if !resp.status().is_success() {
+        anyhow::bail!("Invalid GitHub token");
+    }
+    Ok(())
+}
+
+async fn validate_and_save_token(
+    token: &str,
+    validation: impl std::future::Future<Output = Result<()>>,
+    env_path: &Path,
+    key: &str,
+    fallback_cmd: &str,
+) {
+    let sp = ui::spinner("Validating token...");
+    match validation.await {
+        Ok(()) => {
+            sp.finish_and_clear();
+            ui::success("Token is valid");
+            if let Err(e) = crate::login::save_fleet_secret(env_path, key, token) {
+                ui::error(&format!("Failed to save token: {e}"));
+            }
+        }
+        Err(e) => {
+            sp.finish_and_clear();
+            ui::error(&format!("Token validation failed: {e}"));
+            ui::error(&format!("Set it later with `{fallback_cmd}`"));
+        }
+    }
 }

@@ -40,11 +40,13 @@ cargo install --path .
 ## Quick Start
 
 ```bash
-# Initialize a new fleet.toml (prompts for Cloudflare token)
+# Initialize a new fleet.toml (prompts for tokens)
 flow init
 
-# Or add/update Cloudflare token separately
-flow login cf
+# Or add/update tokens separately
+flow login        # set up Cloudflare + GitHub tokens
+flow login cf     # Cloudflare only
+flow login gh     # GitHub only
 
 # Add a server (creates DNS record, bootstraps via Ansible)
 flow server add srv-1 --ip 164.90.130.5
@@ -89,7 +91,9 @@ flow server add <name> --ip ..   # add and bootstrap a server
 flow server remove <name>        # remove a server
 flow server check [name]         # check server health
 
+flow login                       # set up all tokens (Cloudflare + GitHub)
 flow login cf                    # set/update Cloudflare API token
+flow login gh                    # set/update GitHub (GHCR) token
 ```
 
 ## How It Works

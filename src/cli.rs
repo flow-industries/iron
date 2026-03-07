@@ -92,17 +92,20 @@ pub enum Command {
         command: AppCommand,
     },
 
-    /// Login to external services
+    /// Login to external services (runs all if no subcommand given)
     Login {
         #[command(subcommand)]
-        command: LoginCommand,
+        command: Option<LoginCommand>,
     },
 }
 
 #[derive(Subcommand)]
 pub enum LoginCommand {
-    /// Set Cloudflare API token in fleet.env.toml
+    /// Set Cloudflare API token
     Cf,
+
+    /// Set GitHub Container Registry token
+    Gh,
 }
 
 #[derive(Subcommand)]

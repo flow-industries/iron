@@ -68,6 +68,11 @@ flow server remove fl-1
 flow server check
 flow server check fl-1
 
+# Login (set API tokens in fleet.env.toml)
+flow login         # Cloudflare + GitHub sequentially
+flow login cf      # Cloudflare API token only
+flow login gh      # GitHub (GHCR) token only
+
 # Install Ansible dependencies (once)
 ansible-galaxy install -r ansible/requirements.yml
 ```
@@ -108,6 +113,7 @@ src/
   remove.rs     — remove app (teardown + fleet.toml cleanup)
   check.rs      — verify containers, Caddy, stale apps, DNS
   init.rs       — initialize new fleet.toml
+  login.rs      — login cf/gh, save tokens to fleet.env.toml
   app.rs        — app add, add-service, remove-service (toml_edit)
   server.rs     — server add/remove/check (Ansible + toml_edit)
   status.rs     — fleet-wide status, container info, table display
@@ -119,6 +125,7 @@ tests/
   caddy.rs      — Caddy fragment generation
   cloudflare.rs — Cloudflare API
   init.rs       — init command
+  login.rs      — login token saving
   app.rs        — app management
   server.rs     — server management
 ```
