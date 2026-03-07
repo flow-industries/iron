@@ -1,16 +1,19 @@
 # iron
 
-Infrastructure-as-code for the Flow ecosystem. The `flow` CLI reads `fleet.toml` and handles deployment, DNS, reverse proxy, and server bootstrapping.
+A CLI that deploys Docker Compose apps to bare-metal servers with automatic HTTPS, DNS, and zero-downtime updates.
 
-## Stack
+## Features
 
-- **CLI:** Rust (`flow`)
-- **Config:** `fleet.toml` (servers, apps, routing) + `fleet.env.toml` (secrets, gitignored)
-- **Containers:** Docker Compose
-- **Auto-deploy:** WUD (What's Up Docker) + docker-rollout for zero-downtime
-- **Reverse proxy:** Caddy (automatic HTTPS)
-- **DNS:** Cloudflare API
-- **Server setup:** Ansible (hardening, Docker, firewall, fail2ban)
+- **Single config file** — define servers, apps, routing, and sidecars in `fleet.toml`
+- **Docker Compose** — generates compose files and deploys via SSH
+- **Caddy reverse proxy** — automatic HTTPS with generated per-app config fragments
+- **Cloudflare DNS** — creates and manages A records automatically
+- **Zero-downtime deploys** — rolling updates via docker-rollout, or stop-and-replace for stateful services
+- **Server bootstrapping** — provisions new machines with Ansible (Docker, firewall, fail2ban, hardening)
+- **Auto-deploy** — optional WUD (What's Up Docker) integration watches for new images and triggers deploys
+- **Sidecar services** — attach databases, caches, or any container alongside your app
+- **Direct TCP** — expose non-HTTP services (game servers, databases) with port mappings
+- **Secrets management** — env vars live in `fleet.env.toml` (gitignored), deployed as `.env` files
 
 ## Installation
 
@@ -39,140 +42,91 @@ cargo install --path .
 # Initialize a new fleet.toml
 flow init
 
-# Deploy everything
-flow deploy
+# Add a server (creates DNS record, bootstraps via Ansible)
+flow server add srv-1 --ip 164.90.130.5
 
-# Deploy a single app
-flow deploy site
+# Add an app with routing
+flow app add site --image ghcr.io/org/site:latest --server srv-1 --port 3000 \
+    --route example.com --health-path /health
 
-# Fleet status
-flow status
-flow status --server flow-1
+# Add a worker (no routing needed)
+flow app add worker --image ghcr.io/org/worker:latest --server srv-1
 
-# Verify fleet.toml matches reality on servers
-flow check
-flow check --server flow-1
-
-# Stop an app (keeps config, files, and DNS intact)
-flow stop site
-flow stop site --server flow-1
-
-# Restart an app's containers
-flow restart site
-flow restart site --server flow-1
-
-# Add an app to fleet.toml (then run flow deploy <app>)
-flow app add site --image ghcr.io/org/site:latest --server flow-1 --port 3000 \
-    --route flow.industries --health-path /health
-flow app add worker --image ghcr.io/org/worker:latest --server flow-1
-flow app add game --image ghcr.io/org/game:latest --server game-1 \
+# Add a game server with direct TCP
+flow app add game --image ghcr.io/org/game:latest --server srv-1 \
     --deploy-strategy recreate --port-map 9999:9999/tcp
 
-# Add/remove sidecar services
-flow app add-service auth postgres --image postgres:17 \
-    --volume pgdata:/var/lib/postgresql/data --healthcheck "pg_isready -U flow"
-flow app remove-service auth postgres
+# Add sidecar services
+flow app add-service site postgres --image postgres:17 \
+    --volume pgdata:/var/lib/postgresql/data --healthcheck "pg_isready -U app"
 
-# Remove an app (tears down everything + removes from fleet.toml)
-flow remove site
-flow remove site --yes
-
-# Tail logs
-flow logs site
-flow logs site -f
-flow logs site --server flow-1
-
-# Add a new server (creates DNS, bootstraps via Ansible)
-flow server add fl-2 --ip 164.90.130.5
-flow server add fl-2 --ip 164.90.130.5 --host custom.flow.industries
-flow server add fl-2 --ip 164.90.130.5 --ssh-user ubuntu
-
-# Remove a server
-flow server remove fl-2
-
-# Check server health
-flow server check
-flow server check flow-1
+# Deploy
+flow deploy         # deploy all apps
+flow deploy site    # deploy a single app
 ```
 
-## Services
+## Commands
 
-| App | Domain | Server | Strategy |
-|-----|--------|--------|----------|
-| site | flow.industries | flow-1 | rolling |
-| auth | id.flow.industries | flow-1 | rolling |
-| talk | flow.talk | flow-1 | rolling |
-| game-web | flow.game | game-1 | rolling |
-| game-server | *(direct TCP :9999)* | game-1 | recreate |
+```bash
+flow init                        # create fleet.toml
+flow deploy [app]                # deploy all or one app
+flow status [--server srv-1]     # fleet status and container info
+flow check [--server srv-1]      # verify fleet.toml matches servers
+flow stop <app> [--server srv-1] # stop an app
+flow restart <app>               # restart containers
+flow remove <app> [--yes]        # tear down app, remove from fleet.toml
+flow logs <app> [-f]             # tail logs
 
-## How Deploy Works
+flow app add <app> ...           # add app to fleet.toml
+flow app add-service <app> ...   # add sidecar service
+flow app remove-service <app> .. # remove sidecar service
+
+flow server add <name> --ip ..   # add and bootstrap a server
+flow server remove <name>        # remove a server
+flow server check [name]         # check server health
+```
+
+## How It Works
 
 ```
 flow deploy <app>
-  → generate docker-compose.yml + .env from fleet.toml/fleet.env.toml
-  → SSH to target server
-  → upload files to /opt/flow/<app>/
-  → docker compose pull + docker rollout (or recreate)
-  → generate Caddy fragment, reload Caddy
-  → ensure Cloudflare DNS A record
+  1. Parse fleet.toml + fleet.env.toml
+  2. Generate docker-compose.yml and .env
+  3. SSH to target server
+  4. Upload files to /opt/flow/<app>/
+  5. Pull images, rolling deploy (or recreate)
+  6. Generate Caddy config fragment, reload Caddy
+  7. Ensure Cloudflare DNS A record
 ```
 
-## Auto-Deploy
+## Configuration
 
+`fleet.toml` is the single source of truth for your infrastructure. `fleet.env.toml` (gitignored) holds all environment variables and secrets.
+
+```toml
+[fleet]
+domain = "example.com"
+cloudflare_zone_id = "your-zone-id"
+
+[servers.srv-1]
+ip = "164.90.130.5"
+
+[apps.site]
+image = "ghcr.io/org/site:latest"
+servers = ["srv-1"]
+port = 3000
+
+[apps.site.routing]
+routes = ["example.com", "www.example.com"]
+health_path = "/health"
+
+[[apps.site.services]]
+name = "postgres"
+image = "postgres:17"
+volumes = ["pgdata:/var/lib/postgresql/data"]
+healthcheck = "pg_isready -U app"
 ```
-Service repo pushes code → CI builds image → pushes to GHCR
-WUD detects new image → docker compose pull → docker rollout (zero-downtime)
-```
 
-## Adding a Service
+## License
 
-1. Create service repo with Dockerfile + CI pushing to GHCR
-2. `flow app add <name> --image ghcr.io/org/<name>:latest --server <srv> --port 3000 --route <domain>`
-3. Add env vars to `fleet.env.toml` if needed
-4. Run `flow deploy <name>`
-
-## Project Structure
-
-```
-src/
-  main.rs         CLI entrypoint
-  lib.rs          public module re-exports
-  cli.rs          clap command definitions
-  config.rs       fleet.toml parsing and validation
-  compose.rs      docker-compose.yml generation
-  caddy.rs        Caddy reverse proxy fragments
-  cloudflare.rs   DNS A record management
-  deploy.rs       full deploy pipeline
-  stop.rs         stop app containers
-  restart.rs      restart app containers
-  remove.rs       remove app (teardown + config cleanup)
-  check.rs        verify fleet.toml matches server reality
-  init.rs         initialize new fleet.toml
-  app.rs          app add, add-service, remove-service
-  server.rs       server add/remove/check
-  ssh.rs          SSH connection pool
-  status.rs       fleet status display
-  logs.rs         log tailing
-  ui.rs           terminal output helpers
-tests/
-  config.rs       config parsing and validation
-  compose.rs      compose generation
-  caddy.rs        Caddy fragment generation
-  cloudflare.rs   Cloudflare API
-  init.rs         init command
-  app.rs          app management
-  server.rs       server management
-ansible/
-  setup.yml       server bootstrapping playbook
-  ansible.cfg     Ansible configuration
-  requirements.yml  Galaxy role dependencies
-  group_vars/     host group variables
-stacks/
-  caddy/
-    docker-compose.yml  shared Caddy reverse proxy
-  wud/
-    docker-compose.yml  WUD auto-deploy watcher
-    rollout.sh          zero-downtime deploy script
-fleet.toml        server and app definitions
-fleet.env.toml    secrets and env vars (gitignored)
-```
+MIT
