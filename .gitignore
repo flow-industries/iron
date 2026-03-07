@@ -26,3 +26,4 @@ vault_password
 # Flow CLI
 fleet.toml
 fleet.env.toml
+fleet.old.toml
