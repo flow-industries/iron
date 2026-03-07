@@ -35,3 +35,17 @@ pub fn confirm(msg: &str) -> bool {
     }
     matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
 }
+
+pub fn prompt(label: &str) -> Option<String> {
+    eprint!("{} {} ", style("?").yellow().bold(), label);
+    let mut input = String::new();
+    if std::io::stdin().read_line(&mut input).is_err() {
+        return None;
+    }
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
