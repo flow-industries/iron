@@ -1,3 +1,5 @@
+//! Infrastructure-as-code CLI for deploying Docker Compose apps with Caddy reverse proxy and Cloudflare DNS.
+
 pub mod app;
 pub mod caddy;
 pub mod check;

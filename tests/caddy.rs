@@ -2,8 +2,8 @@
 
 use std::collections::HashMap;
 
-use flow::caddy::generate;
-use flow::config::*;
+use iron::caddy::generate;
+use iron::config::*;
 
 #[test]
 fn generate_caddy_fragment() {

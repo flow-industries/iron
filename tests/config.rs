@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use flow::config::*;
+use iron::config::*;
 
 #[test]
 fn parse_minimal_config() {

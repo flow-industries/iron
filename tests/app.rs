@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used)]
 
-use flow::app::{
+use iron::app::{
     ParsedPortMap, remove_service_from_config, write_app_to_config, write_service_to_config,
 };
-use flow::config::FleetConfig;
+use iron::config::FleetConfig;
 
 fn fleet_with_server() -> &'static str {
     r#"
@@ -111,7 +111,7 @@ fn add_writes_app_with_port_maps() {
     assert_eq!(app.ports[0].protocol, "tcp");
     assert_eq!(app.ports[1].internal, 8888);
     assert_eq!(app.ports[1].protocol, "udp");
-    assert_eq!(app.deploy_strategy, flow::config::DeployStrategy::Recreate);
+    assert_eq!(app.deploy_strategy, iron::config::DeployStrategy::Recreate);
 }
 
 #[test]
@@ -171,9 +171,9 @@ servers = ["flow-1"]
     )
     .unwrap();
 
-    let result = flow::app::run(
+    let result = iron::app::run(
         path.to_str().unwrap(),
-        flow::cli::AppCommand::Add {
+        iron::cli::AppCommand::Add {
             name: "site".to_string(),
             image: "nginx:latest".to_string(),
             server: vec!["flow-1".to_string()],
@@ -195,9 +195,9 @@ fn add_rejects_unknown_server() {
     let path = dir.path().join("fleet.toml");
     std::fs::write(&path, fleet_with_server()).unwrap();
 
-    let result = flow::app::run(
+    let result = iron::app::run(
         path.to_str().unwrap(),
-        flow::cli::AppCommand::Add {
+        iron::cli::AppCommand::Add {
             name: "site".to_string(),
             image: "nginx:latest".to_string(),
             server: vec!["nonexistent".to_string()],
@@ -219,9 +219,9 @@ fn add_rejects_routing_without_port() {
     let path = dir.path().join("fleet.toml");
     std::fs::write(&path, fleet_with_server()).unwrap();
 
-    let result = flow::app::run(
+    let result = iron::app::run(
         path.to_str().unwrap(),
-        flow::cli::AppCommand::Add {
+        iron::cli::AppCommand::Add {
             name: "site".to_string(),
             image: "nginx:latest".to_string(),
             server: vec!["flow-1".to_string()],
@@ -248,9 +248,9 @@ fn add_rejects_routing_with_port_maps() {
     let path = dir.path().join("fleet.toml");
     std::fs::write(&path, fleet_with_server()).unwrap();
 
-    let result = flow::app::run(
+    let result = iron::app::run(
         path.to_str().unwrap(),
-        flow::cli::AppCommand::Add {
+        iron::cli::AppCommand::Add {
             name: "site".to_string(),
             image: "nginx:latest".to_string(),
             server: vec!["flow-1".to_string()],
@@ -277,9 +277,9 @@ fn add_rejects_health_without_route() {
     let path = dir.path().join("fleet.toml");
     std::fs::write(&path, fleet_with_server()).unwrap();
 
-    let result = flow::app::run(
+    let result = iron::app::run(
         path.to_str().unwrap(),
-        flow::cli::AppCommand::Add {
+        iron::cli::AppCommand::Add {
             name: "site".to_string(),
             image: "nginx:latest".to_string(),
             server: vec!["flow-1".to_string()],
@@ -417,9 +417,9 @@ fn add_service_rejects_unknown_app() {
     let path = dir.path().join("fleet.toml");
     std::fs::write(&path, fleet_with_server()).unwrap();
 
-    let result = flow::app::run(
+    let result = iron::app::run(
         path.to_str().unwrap(),
-        flow::cli::AppCommand::AddService {
+        iron::cli::AppCommand::AddService {
             app: "nonexistent".to_string(),
             name: "postgres".to_string(),
             image: "postgres:17".to_string(),
@@ -453,9 +453,9 @@ image = "postgres:17"
     )
     .unwrap();
 
-    let result = flow::app::run(
+    let result = iron::app::run(
         path.to_str().unwrap(),
-        flow::cli::AppCommand::AddService {
+        iron::cli::AppCommand::AddService {
             app: "auth".to_string(),
             name: "postgres".to_string(),
             image: "postgres:17".to_string(),
@@ -551,9 +551,9 @@ image = "postgres:17"
     )
     .unwrap();
 
-    let result = flow::app::run(
+    let result = iron::app::run(
         path.to_str().unwrap(),
-        flow::cli::AppCommand::RemoveService {
+        iron::cli::AppCommand::RemoveService {
             app: "auth".to_string(),
             name: "nonexistent".to_string(),
         },

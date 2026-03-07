@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
-use flow::config::FleetConfig;
-use flow::server::{remove_server_from_config, write_server_to_config};
+use iron::config::FleetConfig;
+use iron::server::{remove_server_from_config, write_server_to_config};
 
 #[test]
 fn add_writes_server_to_fleet_toml() {
@@ -86,9 +86,9 @@ user = "deploy"
     .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let result = rt.block_on(flow::server::run(
+    let result = rt.block_on(iron::server::run(
         fleet_path.to_str().unwrap(),
-        flow::cli::ServerCommand::Add {
+        iron::cli::ServerCommand::Add {
             name: "flow-1".to_string(),
             ip: "10.0.0.1".to_string(),
             host: None,
@@ -146,9 +146,9 @@ port = 3000
     .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let result = rt.block_on(flow::server::run(
+    let result = rt.block_on(iron::server::run(
         fleet_path.to_str().unwrap(),
-        flow::cli::ServerCommand::Remove {
+        iron::cli::ServerCommand::Remove {
             name: "flow-1".to_string(),
         },
     ));
@@ -172,9 +172,9 @@ host = "flow-1.example.com"
     .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let result = rt.block_on(flow::server::run(
+    let result = rt.block_on(iron::server::run(
         fleet_path.to_str().unwrap(),
-        flow::cli::ServerCommand::Remove {
+        iron::cli::ServerCommand::Remove {
             name: "nonexistent".to_string(),
         },
     ));

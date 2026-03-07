@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use flow::cloudflare::extract_zone;
+use iron::cloudflare::extract_zone;
 
 #[test]
 fn test_extract_zone() {
