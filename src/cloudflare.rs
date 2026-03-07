@@ -42,6 +42,23 @@ struct UpdateRecord {
     content: String,
 }
 
+pub async fn verify_token(api_token: &str) -> Result<()> {
+    let client = reqwest::Client::new();
+    let url = format!("{CF_API}/user/tokens/verify");
+    let resp: CfResponse<serde_json::Value> = client
+        .get(&url)
+        .bearer_auth(api_token)
+        .send()
+        .await?
+        .json()
+        .await?;
+    if !resp.success {
+        let msgs: Vec<_> = resp.errors.iter().map(|e| e.message.as_str()).collect();
+        anyhow::bail!("Invalid Cloudflare API token: {}", msgs.join(", "));
+    }
+    Ok(())
+}
+
 pub async fn ensure_dns_record(api_token: &str, hostname: &str, ip: &str) -> Result<()> {
     let client = reqwest::Client::new();
 

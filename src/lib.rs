@@ -9,6 +9,7 @@ pub mod compose;
 pub mod config;
 pub mod deploy;
 pub mod init;
+pub mod login;
 pub mod logs;
 pub mod remove;
 pub mod restart;

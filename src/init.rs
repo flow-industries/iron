@@ -5,7 +5,7 @@ use toml_edit::{Array, DocumentMut, Item, Table};
 
 use crate::ui;
 
-pub fn run(config_path: &str) -> Result<()> {
+pub async fn run(config_path: &str) -> Result<()> {
     let path = Path::new(config_path);
 
     if path.exists() {
@@ -23,6 +23,25 @@ pub fn run(config_path: &str) -> Result<()> {
 
     if let Some(zone_id) = ui::prompt("Cloudflare zone ID (skip if not using DNS):") {
         doc["cloudflare_zone_id"] = toml_edit::value(zone_id);
+
+        if let Some(token) =
+            ui::prompt_secret("Cloudflare API token (skip to set later with `flow login cf`):")
+        {
+            let sp = ui::spinner("Validating token...");
+            match crate::cloudflare::verify_token(&token).await {
+                Ok(()) => {
+                    sp.finish_and_clear();
+                    ui::success("Token is valid");
+                    let env_path = Path::new(config_path).with_file_name("fleet.env.toml");
+                    crate::login::save_cloudflare_token(&env_path, &token)?;
+                }
+                Err(e) => {
+                    sp.finish_and_clear();
+                    ui::error(&format!("Token validation failed: {e}"));
+                    ui::error("Set it later with `flow login cf`");
+                }
+            }
+        }
     }
 
     let mut server_names: Vec<String> = Vec::new();

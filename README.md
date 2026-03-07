@@ -34,13 +34,17 @@ cargo install --path .
 ## Prerequisites
 
 - SSH agent with key for target servers
-- `fleet.env.toml` with `cloudflare_api_token` and `ghcr_token`
+- Cloudflare API token (for DNS management)
+- GHCR token (for pulling private images)
 
 ## Quick Start
 
 ```bash
-# Initialize a new fleet.toml
+# Initialize a new fleet.toml (prompts for Cloudflare token)
 flow init
+
+# Or add/update Cloudflare token separately
+flow login cf
 
 # Add a server (creates DNS record, bootstraps via Ansible)
 flow server add srv-1 --ip 164.90.130.5
@@ -84,6 +88,8 @@ flow app remove-service <app> .. # remove sidecar service
 flow server add <name> --ip ..   # add and bootstrap a server
 flow server remove <name>        # remove a server
 flow server check [name]         # check server health
+
+flow login cf                    # set/update Cloudflare API token
 ```
 
 ## How It Works

@@ -49,3 +49,19 @@ pub fn prompt(label: &str) -> Option<String> {
         Some(trimmed.to_string())
     }
 }
+
+pub fn prompt_secret(label: &str) -> Option<String> {
+    eprint!("{} {} ", style("?").yellow().bold(), label);
+    let term = console::Term::stderr();
+    match term.read_secure_line() {
+        Ok(input) => {
+            let trimmed = input.trim().to_string();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        }
+        Err(_) => None,
+    }
+}

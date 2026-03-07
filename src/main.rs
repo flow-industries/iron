@@ -36,8 +36,9 @@ async fn main() -> Result<()> {
             iron::restart::run(&fleet, &app, server.as_deref()).await
         }
         Command::Remove { app, yes } => iron::remove::run(&cli.config, &app, yes).await,
-        Command::Init => iron::init::run(&cli.config),
+        Command::Init => iron::init::run(&cli.config).await,
         Command::Server { command } => iron::server::run(&cli.config, command).await,
         Command::App { command } => iron::app::run(&cli.config, command),
+        Command::Login { command } => iron::login::run(&cli.config, command).await,
     }
 }
