@@ -12,17 +12,30 @@ Infrastructure-as-code for the Flow ecosystem. The `flow` CLI reads `fleet.toml`
 - **DNS:** Cloudflare API
 - **Server setup:** Ansible (hardening, Docker, firewall, fail2ban)
 
+## Installation
+
+```bash
+cargo install flow-iron
+```
+
+This installs two binaries — `flow` and `iron` — which are identical. Use whichever you prefer.
+
+To build from source:
+
+```bash
+git clone https://github.com/flow-industries/iron.git
+cd iron
+cargo install --path .
+```
+
 ## Prerequisites
 
-- Rust toolchain
 - SSH agent with key for target servers
 - `fleet.env.toml` with `cloudflare_api_token` and `ghcr_token`
 
 ## Quick Start
 
 ```bash
-cargo build --release
-
 # Initialize a new fleet.toml
 flow init
 
