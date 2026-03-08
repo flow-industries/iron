@@ -34,8 +34,8 @@ cargo install --path .
 ## Prerequisites
 
 - SSH agent with key for target servers
-- Cloudflare API token (for DNS management)
-- GHCR token (for pulling private images)
+- Cloudflare API token and GHCR token — `flow login` will guide you through setup
+- Python/pip (only for `flow server add` — Ansible is auto-installed if missing)
 
 ## Quick Start
 
