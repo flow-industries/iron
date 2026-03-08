@@ -75,6 +75,81 @@ pub async fn run(config_path: &str, command: ServerCommand) -> Result<()> {
     }
 }
 
+async fn ensure_ansible(project_dir: &Path) -> Result<()> {
+    if command_exists("ansible-playbook").await {
+        return Ok(());
+    }
+
+    if command_exists("pipx").await {
+        if !ui::confirm("ansible-playbook not found. Install via pipx? (y/N)") {
+            bail!("ansible-playbook is required for server setup");
+        }
+
+        let status = tokio::process::Command::new("pipx")
+            .args(["install", "ansible-core"])
+            .status()
+            .await
+            .context("Failed to run pipx")?;
+        if !status.success() {
+            bail!("Failed to install ansible-core via pipx");
+        }
+        ui::success("Installed ansible-core");
+    } else if command_exists("pip3").await {
+        if !ui::confirm("ansible-playbook not found. Install via pip3? (y/N)") {
+            bail!("ansible-playbook is required for server setup");
+        }
+
+        let status = tokio::process::Command::new("pip3")
+            .args(["install", "--user", "ansible-core"])
+            .status()
+            .await
+            .context("Failed to run pip3")?;
+        if !status.success() {
+            bail!("Failed to install ansible-core via pip3");
+        }
+        ui::success("Installed ansible-core");
+    } else {
+        bail!(
+            "ansible-playbook not found and no installer available.\n  \
+             Install manually: pip3 install ansible-core  OR  brew install ansible"
+        );
+    }
+
+    install_ansible_roles(project_dir).await
+}
+
+async fn install_ansible_roles(project_dir: &Path) -> Result<()> {
+    let requirements = project_dir.join("ansible/requirements.yml");
+    if !requirements.exists() {
+        return Ok(());
+    }
+
+    let sp = ui::spinner("Installing Ansible roles...");
+    let status = tokio::process::Command::new("ansible-galaxy")
+        .args(["install", "-r", "ansible/requirements.yml"])
+        .current_dir(project_dir)
+        .status()
+        .await
+        .context("Failed to run ansible-galaxy")?;
+    sp.finish_and_clear();
+
+    if !status.success() {
+        bail!("Failed to install Ansible roles");
+    }
+    ui::success("Ansible roles installed");
+    Ok(())
+}
+
+async fn command_exists(name: &str) -> bool {
+    tokio::process::Command::new("which")
+        .arg(name)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .await
+        .is_ok_and(|s| s.success())
+}
+
 async fn add(
     config_path: &str,
     name: &str,
@@ -105,6 +180,20 @@ async fn add(
         format!("{name}.{domain}")
     };
 
+    let project_dir = config_path.parent().unwrap_or(Path::new("."));
+
+    let ansible_dir = project_dir.join("ansible");
+    if !ansible_dir.join("setup.yml").exists() {
+        bail!(
+            "Ansible playbook not found at {}",
+            ansible_dir.join("setup.yml").display()
+        );
+    }
+
+    let resolved_key = resolve_ssh_key(cli_ssh_key, config.ssh_key.as_deref())?;
+
+    ensure_ansible(project_dir).await?;
+
     let env_path = config_path.with_file_name("fleet.env.toml");
     let (ghcr_token, cf_token) = if env_path.exists() {
         let env_content = std::fs::read_to_string(&env_path)
@@ -123,26 +212,16 @@ async fn add(
     };
 
     let cf_token = cf_token.ok_or_else(|| {
-        anyhow::anyhow!("Cannot create DNS record: cloudflare_api_token not set in fleet.env.toml")
+        anyhow::anyhow!(
+            "Cannot create DNS record: cloudflare_api_token not set in fleet.env.toml\n  \
+             Run `flow login cf` to set it"
+        )
     })?;
 
     let sp = ui::spinner(&format!("Creating DNS record {hostname} → {ip}..."));
     crate::cloudflare::ensure_dns_record(&cf_token, &hostname, ip).await?;
     sp.finish_and_clear();
     ui::success(&format!("{hostname} → {ip}"));
-
-    let ansible_dir = config_path
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join("ansible");
-    if !ansible_dir.join("setup.yml").exists() {
-        bail!(
-            "Ansible playbook not found at {}",
-            ansible_dir.join("setup.yml").display()
-        );
-    }
-
-    let resolved_key = resolve_ssh_key(cli_ssh_key, config.ssh_key.as_deref())?;
 
     ui::header("Ansible setup");
     let mut cmd = tokio::process::Command::new("ansible-playbook");
@@ -153,7 +232,7 @@ async fn add(
         .arg(ssh_user)
         .arg("-e")
         .arg(format!("ssh_pub_key_path={resolved_key}"))
-        .current_dir(config_path.parent().unwrap_or(Path::new(".")));
+        .current_dir(project_dir);
 
     if let Some(ref token) = ghcr_token {
         cmd.arg("-e").arg(format!("ghcr_token={token}"));
