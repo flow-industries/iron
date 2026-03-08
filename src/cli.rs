@@ -101,6 +101,9 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<LoginCommand>,
     },
+
+    /// Update flow CLI to the latest version
+    Update,
 }
 
 #[derive(Subcommand)]
