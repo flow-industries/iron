@@ -75,17 +75,17 @@ pub async fn run(config_path: &str, command: ServerCommand) -> Result<()> {
     }
 }
 
-async fn ensure_ansible(project_dir: &Path) -> Result<()> {
-    if command_exists("ansible-playbook").await {
-        return Ok(());
+async fn ensure_ansible(project_dir: &Path) -> Result<String> {
+    if let Some(path) = resolve_command("ansible-playbook").await {
+        return Ok(path);
     }
 
-    if command_exists("pipx").await {
+    if let Some(pipx) = resolve_command("pipx").await {
         if !ui::confirm("ansible-playbook not found. Install via pipx? (y/N)") {
             bail!("ansible-playbook is required for server setup");
         }
 
-        let status = tokio::process::Command::new("pipx")
+        let status = tokio::process::Command::new(&pipx)
             .args(["install", "ansible-core"])
             .status()
             .await
@@ -94,12 +94,12 @@ async fn ensure_ansible(project_dir: &Path) -> Result<()> {
             bail!("Failed to install ansible-core via pipx");
         }
         ui::success("Installed ansible-core");
-    } else if command_exists("pip3").await {
+    } else if let Some(pip3) = resolve_command("pip3").await {
         if !ui::confirm("ansible-playbook not found. Install via pip3? (y/N)") {
             bail!("ansible-playbook is required for server setup");
         }
 
-        let status = tokio::process::Command::new("pip3")
+        let status = tokio::process::Command::new(&pip3)
             .args(["install", "--user", "ansible-core"])
             .status()
             .await
@@ -115,7 +115,11 @@ async fn ensure_ansible(project_dir: &Path) -> Result<()> {
         );
     }
 
-    install_ansible_roles(project_dir).await
+    install_ansible_roles(project_dir).await?;
+
+    resolve_command("ansible-playbook")
+        .await
+        .context("ansible-playbook still not found after install")
 }
 
 async fn install_ansible_roles(project_dir: &Path) -> Result<()> {
@@ -124,8 +128,12 @@ async fn install_ansible_roles(project_dir: &Path) -> Result<()> {
         return Ok(());
     }
 
+    let galaxy = resolve_command("ansible-galaxy")
+        .await
+        .context("ansible-galaxy not found")?;
+
     let sp = ui::spinner("Installing Ansible roles...");
-    let status = tokio::process::Command::new("ansible-galaxy")
+    let status = tokio::process::Command::new(&galaxy)
         .args(["install", "-r", "ansible/requirements.yml"])
         .current_dir(project_dir)
         .status()
@@ -140,14 +148,22 @@ async fn install_ansible_roles(project_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn command_exists(name: &str) -> bool {
-    tokio::process::Command::new("which")
+async fn resolve_command(name: &str) -> Option<String> {
+    let output = tokio::process::Command::new("which")
         .arg(name)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
+        .output()
         .await
-        .is_ok_and(|s| s.success())
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let path = String::from_utf8(output.stdout).ok()?;
+    let trimmed = path.trim().to_string();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
 }
 
 async fn add(
@@ -192,7 +208,7 @@ async fn add(
 
     let resolved_key = resolve_ssh_key(cli_ssh_key, config.ssh_key.as_deref())?;
 
-    ensure_ansible(project_dir).await?;
+    let ansible_playbook = ensure_ansible(project_dir).await?;
 
     let env_path = config_path.with_file_name("fleet.env.toml");
     let (ghcr_token, cf_token) = if env_path.exists() {
@@ -224,7 +240,7 @@ async fn add(
     ui::success(&format!("{hostname} → {ip}"));
 
     ui::header("Ansible setup");
-    let mut cmd = tokio::process::Command::new("ansible-playbook");
+    let mut cmd = tokio::process::Command::new(&ansible_playbook);
     cmd.arg("ansible/setup.yml")
         .arg("-i")
         .arg(format!("{ip},"))
