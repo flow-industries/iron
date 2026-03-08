@@ -7,9 +7,16 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Check { server } => {
+        Command::Check {
+            server,
+            with_hardening,
+        } => {
             let fleet = iron::config::load(&cli.config)?;
-            iron::check::run(&fleet, server.as_deref()).await
+            iron::check::run(&fleet, server.as_deref()).await?;
+            if with_hardening {
+                iron::server::run_hardening(&cli.config, server.as_deref()).await?;
+            }
+            Ok(())
         }
         Command::Deploy { app } => {
             let fleet = iron::config::load(&cli.config)?;

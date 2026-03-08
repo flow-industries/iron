@@ -74,9 +74,11 @@ pub async fn run(config_path: &str, command: ServerCommand) -> Result<()> {
             .await
         }
         ServerCommand::Remove { name } => remove(config_path, &name),
-        ServerCommand::Check { name, ssh_user } => {
-            check(config_path, name.as_deref(), &ssh_user).await
-        }
+        ServerCommand::Check {
+            name,
+            ssh_user,
+            with_hardening,
+        } => check(config_path, name.as_deref(), &ssh_user, with_hardening).await,
     }
 }
 
@@ -420,7 +422,65 @@ fn remove(config_path: &str, name: &str) -> Result<()> {
     Ok(())
 }
 
-async fn check(config_path: &str, name: Option<&str>, ssh_user: &str) -> Result<()> {
+async fn check(
+    config_path: &str,
+    name: Option<&str>,
+    _ssh_user: &str,
+    with_hardening: bool,
+) -> Result<()> {
+    if with_hardening {
+        run_hardening(config_path, name).await?;
+    }
+
+    let config_path = Path::new(config_path);
+    let fleet = crate::config::load(config_path.to_str().unwrap_or("fleet.toml"))?;
+
+    let env_path = config_path.with_file_name("fleet.env.toml");
+    let (ghcr_token, ghcr_username) = if env_path.exists() {
+        let env_content = std::fs::read_to_string(&env_path)
+            .with_context(|| format!("Failed to read {}", env_path.display()))?;
+        let env_config: EnvConfig = toml::from_str(&env_content)
+            .with_context(|| format!("Failed to parse {}", env_path.display()))?;
+        (
+            env_config.fleet.ghcr_token.filter(|t| !t.is_empty()),
+            env_config.fleet.ghcr_username.filter(|t| !t.is_empty()),
+        )
+    } else {
+        (None, None)
+    };
+
+    let servers_to_check: Vec<(String, Server)> = if let Some(name) = name {
+        let server = fleet
+            .servers
+            .get(name)
+            .with_context(|| format!("Server '{name}' not found"))?;
+        vec![(name.to_string(), server.clone())]
+    } else {
+        fleet
+            .servers
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    };
+
+    for (name, server) in &servers_to_check {
+        ui::header(&format!("Infrastructure: {name}"));
+        let pool = SshPool::connect_one(name, server).await?;
+        deploy_infra(
+            &pool,
+            name,
+            &fleet.network,
+            ghcr_username.as_deref(),
+            ghcr_token.as_deref(),
+        )
+        .await?;
+        pool.close().await?;
+    }
+
+    Ok(())
+}
+
+pub async fn run_hardening(config_path: &str, server_filter: Option<&str>) -> Result<()> {
     let config_path = Path::new(config_path);
     let fleet = crate::config::load(config_path.to_str().unwrap_or("fleet.toml"))?;
 
@@ -451,7 +511,7 @@ async fn check(config_path: &str, name: Option<&str>, ssh_user: &str) -> Result<
         None
     };
 
-    let servers_to_check: Vec<(String, Server)> = if let Some(name) = name {
+    let servers: Vec<(String, Server)> = if let Some(name) = server_filter {
         let server = fleet
             .servers
             .get(name)
@@ -465,20 +525,20 @@ async fn check(config_path: &str, name: Option<&str>, ssh_user: &str) -> Result<
             .collect()
     };
 
-    for (name, server) in &servers_to_check {
+    for (name, server) in &servers {
         let ip = server
             .ip
             .as_deref()
             .with_context(|| format!("Server '{name}' has no IP address"))?;
 
-        ui::header(&format!("Server: {name} ({} / {ip})", server.host));
+        ui::header(&format!("Hardening: {name} ({} / {ip})", server.host));
 
         let mut cmd = tokio::process::Command::new(&ansible_playbook);
         cmd.arg("ansible/setup.yml")
             .arg("-i")
             .arg(format!("{ip},"))
             .arg("-u")
-            .arg(ssh_user)
+            .arg("root")
             .arg("-e")
             .arg(format!("ssh_pub_key_path={resolved_key}"))
             .current_dir(project_dir);
@@ -493,20 +553,9 @@ async fn check(config_path: &str, name: Option<&str>, ssh_user: &str) -> Result<
             .context("Failed to run ansible-playbook")?;
 
         if status.success() {
-            ui::success(&format!("Server '{name}' Ansible up to date"));
-
-            let pool = SshPool::connect_one(name, server).await?;
-            deploy_infra(
-                &pool,
-                name,
-                &fleet.network,
-                fleet.secrets.ghcr_username.as_deref(),
-                ghcr_token.as_deref(),
-            )
-            .await?;
-            pool.close().await?;
+            ui::success(&format!("Server '{name}' hardening up to date"));
         } else {
-            ui::error(&format!("Server '{name}' check failed"));
+            ui::error(&format!("Server '{name}' hardening failed"));
         }
     }
 

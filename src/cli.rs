@@ -24,6 +24,10 @@ pub enum Command {
         /// Filter by server name
         #[arg(long)]
         server: Option<String>,
+
+        /// Re-run Ansible hardening playbook
+        #[arg(long)]
+        with_hardening: bool,
     },
 
     /// Show fleet-wide status and container info
@@ -142,7 +146,7 @@ pub enum ServerCommand {
         name: String,
     },
 
-    /// Verify a server is properly set up (re-runs Ansible)
+    /// Verify server setup and update infrastructure containers
     Check {
         /// Server name (checks all if omitted)
         name: Option<String>,
@@ -150,6 +154,10 @@ pub enum ServerCommand {
         /// SSH user for Ansible connection
         #[arg(long, default_value = "root")]
         ssh_user: String,
+
+        /// Re-run Ansible hardening playbook
+        #[arg(long)]
+        with_hardening: bool,
     },
 }
 
