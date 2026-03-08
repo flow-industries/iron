@@ -8,7 +8,6 @@ use std::path::Path;
 pub struct FleetConfig {
     pub domain: Option<String>,
     pub ssh_key: Option<String>,
-    pub ghcr_username: Option<String>,
     #[serde(default = "default_network")]
     pub network: String,
     #[serde(default)]
@@ -112,6 +111,7 @@ pub struct AppEnv {
 #[derive(Debug, Deserialize, Default, Clone)]
 pub struct FleetSecrets {
     pub ghcr_token: Option<String>,
+    pub ghcr_username: Option<String>,
     pub cloudflare_api_token: Option<String>,
 }
 
@@ -119,7 +119,6 @@ pub struct FleetSecrets {
 pub struct Fleet {
     pub domain: Option<String>,
     pub network: String,
-    pub ghcr_username: Option<String>,
     pub servers: HashMap<String, Server>,
     pub apps: HashMap<String, ResolvedApp>,
     pub secrets: FleetSecrets,
@@ -358,7 +357,6 @@ pub fn load(config_path: &str) -> Result<Fleet> {
     Ok(Fleet {
         domain: config.domain,
         network: config.network,
-        ghcr_username: config.ghcr_username,
         servers: config.servers,
         apps: resolved_apps,
         secrets: env_config.fleet,

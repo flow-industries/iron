@@ -248,7 +248,7 @@ async fn deploy_infra(
         sp.finish_and_clear();
         ui::success("Caddy started");
         ui::error(
-            "WUD skipped: set ghcr_username in fleet.toml and ghcr_token via `flow login gh`",
+            "WUD skipped: set ghcr_username and ghcr_token in fleet.env.toml (or use `flow login gh`)",
         );
     }
 
@@ -303,20 +303,21 @@ async fn add(
     let ansible_playbook = ensure_ansible(project_dir).await?;
 
     let env_path = config_path.with_file_name("fleet.env.toml");
-    let (ghcr_token, cf_token) = if env_path.exists() {
+    let (ghcr_token, ghcr_username, cf_token) = if env_path.exists() {
         let env_content = std::fs::read_to_string(&env_path)
             .with_context(|| format!("Failed to read {}", env_path.display()))?;
         let env_config: EnvConfig = toml::from_str(&env_content)
             .with_context(|| format!("Failed to parse {}", env_path.display()))?;
         (
             env_config.fleet.ghcr_token.filter(|t| !t.is_empty()),
+            env_config.fleet.ghcr_username.filter(|t| !t.is_empty()),
             env_config
                 .fleet
                 .cloudflare_api_token
                 .filter(|t| !t.is_empty()),
         )
     } else {
-        (None, None)
+        (None, None, None)
     };
 
     let cf_token = cf_token.ok_or_else(|| {
@@ -375,7 +376,7 @@ async fn add(
         &pool,
         name,
         &config.network,
-        config.ghcr_username.as_deref(),
+        ghcr_username.as_deref(),
         ghcr_token.as_deref(),
     )
     .await?;
@@ -499,7 +500,7 @@ async fn check(config_path: &str, name: Option<&str>, ssh_user: &str) -> Result<
                 &pool,
                 name,
                 &fleet.network,
-                fleet.ghcr_username.as_deref(),
+                fleet.secrets.ghcr_username.as_deref(),
                 ghcr_token.as_deref(),
             )
             .await?;

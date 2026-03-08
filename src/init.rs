@@ -21,10 +21,6 @@ pub async fn run(config_path: &str) -> Result<()> {
         doc["domain"] = toml_edit::value(domain);
     }
 
-    if let Some(username) = ui::prompt("GitHub org/username for GHCR (e.g. flow-industries):") {
-        doc["ghcr_username"] = toml_edit::value(username);
-    }
-
     if let Some(zone_id) = ui::prompt("Cloudflare zone ID (skip if not using DNS):") {
         doc["cloudflare_zone_id"] = toml_edit::value(zone_id);
 
@@ -40,6 +36,13 @@ pub async fn run(config_path: &str) -> Result<()> {
                 "flow login cf",
             )
             .await;
+        }
+    }
+
+    if let Some(username) = ui::prompt("GitHub org/username for GHCR (e.g. flow-industries):") {
+        let env_path = Path::new(config_path).with_file_name("fleet.env.toml");
+        if let Err(e) = crate::login::save_fleet_secret(&env_path, "ghcr_username", &username) {
+            ui::error(&format!("Failed to save username: {e}"));
         }
     }
 
