@@ -71,7 +71,7 @@ async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool) -> Result<
 
         let app_dir = format!("/opt/flow/{}", app.name);
 
-        pool.exec(server_name, &format!("sudo mkdir -p {app_dir}"))
+        pool.exec(server_name, &format!("mkdir -p {app_dir}"))
             .await?;
 
         let compose_path = format!("{app_dir}/docker-compose.yml");
@@ -118,7 +118,7 @@ async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool) -> Result<
         if let Some(ref fragment) = caddy_fragment {
             let sp = ui::spinner(&format!("  {server_name} → updating Caddy..."));
             let caddy_sites_dir = "/opt/flow/caddy/sites";
-            pool.exec(server_name, &format!("sudo mkdir -p {caddy_sites_dir}"))
+            pool.exec(server_name, &format!("mkdir -p {caddy_sites_dir}"))
                 .await?;
             let caddy_path = format!("{}/{}", caddy_sites_dir, app.name);
             pool.upload_file(server_name, &caddy_path, fragment).await?;

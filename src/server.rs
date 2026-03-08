@@ -214,11 +214,8 @@ async fn deploy_infra(
     )
     .await?;
 
-    pool.exec(
-        server_name,
-        "sudo mkdir -p /opt/flow/caddy/sites /opt/flow/wud",
-    )
-    .await?;
+    pool.exec(server_name, "mkdir -p /opt/flow/caddy/sites /opt/flow/wud")
+        .await?;
 
     pool.upload_file(
         server_name,
