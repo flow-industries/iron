@@ -38,6 +38,11 @@
     - hifis.toolkit.unattended_upgrades
 
   tasks:
+    - name: Restart Docker to restore iptables rules after firewall
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+
     - name: Add deploy user to docker group
       ansible.builtin.user:
         name: "{{ deploy_user }}"

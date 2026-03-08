@@ -11,6 +11,11 @@ firewall_allowed_tcp_ports:
   - "443"
 firewall_allowed_udp_ports: []
 firewall_flush_rules_and_chains: false
+firewall_additional_rules:
+  - "iptables -A FORWARD -o docker0 -j ACCEPT"
+  - "iptables -A FORWARD -i docker0 -j ACCEPT"
+  - "iptables -A FORWARD -o br-+ -j ACCEPT"
+  - "iptables -A FORWARD -i br-+ -j ACCEPT"
 
 # Fail2ban (robertdebock.fail2ban)
 fail2ban_bantime: 3600
