@@ -174,15 +174,15 @@ servers = ["flow-1"]
     let result = iron::app::run(
         path.to_str().unwrap(),
         iron::cli::AppCommand::Add {
-            name: "site".to_string(),
-            image: "nginx:latest".to_string(),
+            name: Some("site".to_string()),
+            image: Some("nginx:latest".to_string()),
             server: vec!["flow-1".to_string()],
             port: None,
             route: vec![],
             health_path: None,
             health_interval: None,
             port_map: vec![],
-            deploy_strategy: "rolling".to_string(),
+            deploy_strategy: Some("rolling".to_string()),
         },
     );
     assert!(result.is_err());
@@ -198,15 +198,15 @@ fn add_rejects_unknown_server() {
     let result = iron::app::run(
         path.to_str().unwrap(),
         iron::cli::AppCommand::Add {
-            name: "site".to_string(),
-            image: "nginx:latest".to_string(),
+            name: Some("site".to_string()),
+            image: Some("nginx:latest".to_string()),
             server: vec!["nonexistent".to_string()],
             port: None,
             route: vec![],
             health_path: None,
             health_interval: None,
             port_map: vec![],
-            deploy_strategy: "rolling".to_string(),
+            deploy_strategy: Some("rolling".to_string()),
         },
     );
     assert!(result.is_err());
@@ -222,15 +222,15 @@ fn add_rejects_routing_without_port() {
     let result = iron::app::run(
         path.to_str().unwrap(),
         iron::cli::AppCommand::Add {
-            name: "site".to_string(),
-            image: "nginx:latest".to_string(),
+            name: Some("site".to_string()),
+            image: Some("nginx:latest".to_string()),
             server: vec!["flow-1".to_string()],
             port: None,
             route: vec!["example.com".to_string()],
             health_path: None,
             health_interval: None,
             port_map: vec![],
-            deploy_strategy: "rolling".to_string(),
+            deploy_strategy: Some("rolling".to_string()),
         },
     );
     assert!(result.is_err());
@@ -251,15 +251,15 @@ fn add_rejects_routing_with_port_maps() {
     let result = iron::app::run(
         path.to_str().unwrap(),
         iron::cli::AppCommand::Add {
-            name: "site".to_string(),
-            image: "nginx:latest".to_string(),
+            name: Some("site".to_string()),
+            image: Some("nginx:latest".to_string()),
             server: vec!["flow-1".to_string()],
             port: Some(3000),
             route: vec!["example.com".to_string()],
             health_path: None,
             health_interval: None,
             port_map: vec!["9999:9999".to_string()],
-            deploy_strategy: "rolling".to_string(),
+            deploy_strategy: Some("rolling".to_string()),
         },
     );
     assert!(result.is_err());
@@ -280,15 +280,15 @@ fn add_rejects_health_without_route() {
     let result = iron::app::run(
         path.to_str().unwrap(),
         iron::cli::AppCommand::Add {
-            name: "site".to_string(),
-            image: "nginx:latest".to_string(),
+            name: Some("site".to_string()),
+            image: Some("nginx:latest".to_string()),
             server: vec!["flow-1".to_string()],
             port: Some(3000),
             route: vec![],
             health_path: Some("/health".to_string()),
             health_interval: None,
             port_map: vec![],
-            deploy_strategy: "rolling".to_string(),
+            deploy_strategy: Some("rolling".to_string()),
         },
     );
     assert!(result.is_err());

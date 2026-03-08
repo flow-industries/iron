@@ -152,17 +152,17 @@ pub enum ServerCommand {
 
 #[derive(Subcommand)]
 pub enum AppCommand {
-    /// Add a new app to fleet.toml
+    /// Add a new app to fleet.toml (interactive wizard if no args given)
     Add {
         /// App name (used as identifier in fleet.toml)
-        name: String,
+        name: Option<String>,
 
         /// Docker image (e.g., ghcr.io/org/app:latest)
         #[arg(long)]
-        image: String,
+        image: Option<String>,
 
         /// Server(s) to deploy to (must exist in fleet.toml, repeatable)
-        #[arg(long, required = true)]
+        #[arg(long)]
         server: Vec<String>,
 
         /// Container port (required if routing is used)
@@ -186,8 +186,8 @@ pub enum AppCommand {
         port_map: Vec<String>,
 
         /// Deploy strategy: rolling (default) or recreate
-        #[arg(long, default_value = "rolling")]
-        deploy_strategy: String,
+        #[arg(long)]
+        deploy_strategy: Option<String>,
     },
 
     /// Add a sidecar service to an existing app

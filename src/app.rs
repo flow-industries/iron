@@ -57,18 +57,31 @@ pub fn run(config_path: &str, command: AppCommand) -> Result<()> {
             health_interval,
             port_map: raw_port_maps,
             deploy_strategy,
-        } => add(
-            config_path,
-            &name,
-            &image,
-            &servers,
-            port,
-            &routes,
-            health_path.as_deref(),
-            health_interval.as_deref(),
-            &raw_port_maps,
-            &deploy_strategy,
-        ),
+        } => {
+            let interactive = name.is_none() && image.is_none() && servers.is_empty();
+            if interactive {
+                interactive_add(config_path)
+            } else {
+                let name = name.context("App name is required")?;
+                let image = image.context("--image is required")?;
+                if servers.is_empty() {
+                    bail!("--server is required");
+                }
+                let deploy_strategy = deploy_strategy.unwrap_or_else(|| "rolling".to_string());
+                add(
+                    config_path,
+                    &name,
+                    &image,
+                    &servers,
+                    port,
+                    &routes,
+                    health_path.as_deref(),
+                    health_interval.as_deref(),
+                    &raw_port_maps,
+                    &deploy_strategy,
+                )
+            }
+        }
         AppCommand::AddService {
             app,
             name,
@@ -87,6 +100,118 @@ pub fn run(config_path: &str, command: AppCommand) -> Result<()> {
         ),
         AppCommand::RemoveService { app, name } => remove_service(config_path, &app, &name),
     }
+}
+
+fn interactive_add(config_path: &str) -> Result<()> {
+    let config_path_p = Path::new(config_path);
+    let content = std::fs::read_to_string(config_path_p)
+        .with_context(|| format!("Failed to read {}", config_path_p.display()))?;
+    let config: FleetConfig = toml::from_str(&content)
+        .with_context(|| format!("Failed to parse {}", config_path_p.display()))?;
+
+    ui::header("Add app");
+
+    let Some(name) = ui::prompt("App name:") else {
+        bail!("App name is required");
+    };
+
+    let Some(image) = ui::prompt("Docker image (e.g. ghcr.io/org/app:latest):") else {
+        bail!("Docker image is required");
+    };
+
+    let available_servers: Vec<&str> = config.servers.keys().map(String::as_str).collect();
+    if available_servers.is_empty() {
+        bail!("No servers in fleet.toml — add one with 'flow server add' first");
+    }
+    println!("  Available servers: {}", available_servers.join(", "));
+
+    let mut servers = Vec::new();
+    loop {
+        let label = if servers.is_empty() {
+            "Server:"
+        } else {
+            "Another server (empty to finish):"
+        };
+        let Some(server) = ui::prompt(label) else {
+            if servers.is_empty() {
+                ui::error("At least one server is required");
+                continue;
+            }
+            break;
+        };
+        if !config.servers.contains_key(server.as_str()) {
+            ui::error(&format!("Server '{server}' not in fleet.toml"));
+            continue;
+        }
+        if servers.contains(&server) {
+            ui::error(&format!("Server '{server}' already added"));
+            continue;
+        }
+        servers.push(server);
+    }
+
+    let mut port = None;
+    let mut routes = Vec::new();
+    let mut health_path = None;
+    let mut health_interval = None;
+    let mut raw_port_maps = Vec::new();
+
+    if ui::confirm("Add HTTP routing via Caddy? (y/N)") {
+        let Some(port_str) = ui::prompt("Container port:") else {
+            bail!("Port is required for HTTP routing");
+        };
+        port = Some(port_str.parse::<u16>().context("Invalid port number")?);
+
+        loop {
+            let label = if routes.is_empty() {
+                "Route hostname (e.g. app.example.com):"
+            } else {
+                "Another route (empty to finish):"
+            };
+            let Some(route) = ui::prompt(label) else {
+                if routes.is_empty() {
+                    ui::error("At least one route is required");
+                    continue;
+                }
+                break;
+            };
+            routes.push(route);
+        }
+
+        health_path = ui::prompt("Health check path (e.g. /health, empty to skip):");
+        if health_path.is_some() {
+            health_interval = ui::prompt("Health check interval (e.g. 5s, empty for default):");
+        }
+    } else if ui::confirm("Add direct port mappings? (y/N)") {
+        loop {
+            let Some(pm) =
+                ui::prompt("Port mapping (external:internal[/protocol], empty to finish):")
+            else {
+                break;
+            };
+            if let Err(e) = parse_port_map(&pm) {
+                ui::error(&format!("{e}"));
+                continue;
+            }
+            raw_port_maps.push(pm);
+        }
+    }
+
+    let deploy_strategy = ui::prompt("Deploy strategy (rolling/recreate, empty for rolling):")
+        .unwrap_or_else(|| "rolling".to_string());
+
+    add(
+        config_path,
+        &name,
+        &image,
+        &servers,
+        port,
+        &routes,
+        health_path.as_deref(),
+        health_interval.as_deref(),
+        &raw_port_maps,
+        &deploy_strategy,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
