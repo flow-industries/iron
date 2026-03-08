@@ -3,7 +3,6 @@ use std::path::Path;
 
 use crate::cli::ServerCommand;
 use crate::config::{EnvConfig, FleetConfig, Server};
-use crate::ssh::SshPool;
 use crate::ui;
 
 fn expand_tilde(path: &str) -> String {
@@ -305,7 +304,35 @@ fn remove(config_path: &str, name: &str) -> Result<()> {
 }
 
 async fn check(config_path: &str, name: Option<&str>) -> Result<()> {
-    let fleet = crate::config::load(config_path)?;
+    let config_path = Path::new(config_path);
+    let fleet = crate::config::load(config_path.to_str().unwrap_or("fleet.toml"))?;
+
+    let project_dir = config_path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+
+    let ansible_dir = project_dir.join("ansible");
+    if !ansible_dir.join("setup.yml").exists() {
+        bail!(
+            "Ansible playbook not found at {}",
+            ansible_dir.join("setup.yml").display()
+        );
+    }
+
+    let ansible_playbook = ensure_ansible(project_dir).await?;
+    let resolved_key = resolve_ssh_key(None, fleet.domain.as_deref().and(None))?;
+
+    let env_path = config_path.with_file_name("fleet.env.toml");
+    let ghcr_token = if env_path.exists() {
+        let env_content = std::fs::read_to_string(&env_path)
+            .with_context(|| format!("Failed to read {}", env_path.display()))?;
+        let env_config: EnvConfig = toml::from_str(&env_content)
+            .with_context(|| format!("Failed to parse {}", env_path.display()))?;
+        env_config.fleet.ghcr_token.filter(|t| !t.is_empty())
+    } else {
+        None
+    };
 
     let servers_to_check: Vec<(String, Server)> = if let Some(name) = name {
         let server = fleet
@@ -322,60 +349,40 @@ async fn check(config_path: &str, name: Option<&str>) -> Result<()> {
     };
 
     for (name, server) in &servers_to_check {
-        let display = match &server.ip {
-            Some(ip) => format!("Server: {} ({} / {})", name, server.host, ip),
-            None => format!("Server: {} ({})", name, server.host),
-        };
-        ui::header(&display);
+        let ip = server
+            .ip
+            .as_deref()
+            .with_context(|| format!("Server '{name}' has no IP address"))?;
 
-        let pool = match SshPool::connect_one(name, server).await {
-            Ok(pool) => {
-                ui::success("SSH connection");
-                pool
-            }
-            Err(e) => {
-                ui::error(&format!("SSH connection: {e}"));
-                continue;
-            }
-        };
+        ui::header(&format!("Server: {name} ({} / {ip})", server.host));
 
-        run_check(
-            &pool,
-            name,
-            "Docker running",
-            "docker info --format '{{.ServerVersion}}'",
-        )
-        .await;
-        run_check(
-            &pool,
-            name,
-            "docker-rollout",
-            "test -x /usr/libexec/docker/cli-plugins/docker-rollout",
-        )
-        .await;
-        run_check(&pool, name, "Deploy directory", "test -d /opt/flow").await;
-        run_check(
-            &pool,
-            name,
-            "Docker network",
-            &format!(
-                "docker network inspect {} --format '{{{{.Name}}}}'",
-                fleet.network
-            ),
-        )
-        .await;
+        let mut cmd = tokio::process::Command::new(&ansible_playbook);
+        cmd.arg("ansible/setup.yml")
+            .arg("-i")
+            .arg(format!("{ip},"))
+            .arg("-u")
+            .arg(&server.user)
+            .arg("-e")
+            .arg(format!("ssh_pub_key_path={resolved_key}"))
+            .current_dir(project_dir);
 
-        let _ = pool.close().await;
+        if let Some(ref token) = ghcr_token {
+            cmd.arg("-e").arg(format!("ghcr_token={token}"));
+        }
+
+        let status = cmd
+            .status()
+            .await
+            .context("Failed to run ansible-playbook")?;
+
+        if status.success() {
+            ui::success(&format!("Server '{name}' is up to date"));
+        } else {
+            ui::error(&format!("Server '{name}' check failed"));
+        }
     }
 
     Ok(())
-}
-
-async fn run_check(pool: &SshPool, server: &str, label: &str, cmd: &str) {
-    match pool.exec(server, cmd).await {
-        Ok(_) => ui::success(label),
-        Err(_) => ui::error(label),
-    }
 }
 
 pub fn write_server_to_config(
