@@ -243,6 +243,13 @@ async fn add(
     sp.finish_and_clear();
     ui::success(&format!("{hostname} → {ip}"));
 
+    let _ = tokio::process::Command::new("ssh-keygen")
+        .args(["-R", ip])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .await;
+
     ui::header("Ansible setup");
     let mut cmd = tokio::process::Command::new(&ansible_playbook);
     cmd.arg("ansible/setup.yml")
@@ -252,6 +259,7 @@ async fn add(
         .arg(ssh_user)
         .arg("-e")
         .arg(format!("ssh_pub_key_path={resolved_key}"))
+        .env("ANSIBLE_HOST_KEY_CHECKING", "False")
         .current_dir(project_dir);
 
     if let Some(ref token) = ghcr_token {
