@@ -1,6 +1,6 @@
 [package]
 name = "flow-iron"
-version = "0.4.6"
+version = "0.4.7"
 edition = "2024"
 description = "Infrastructure-as-code CLI — deploy Docker Compose apps with Caddy reverse proxy and Cloudflare DNS"
 license = "MIT"

@@ -208,6 +208,16 @@ async fn check_dns(fleet: &Fleet, filtered: &HashMap<String, Server>) {
     };
 
     let mut routes: HashMap<&str, HashSet<&str>> = HashMap::new();
+
+    for server in filtered.values() {
+        if let Some(ref ip) = server.ip {
+            routes
+                .entry(server.host.as_str())
+                .or_default()
+                .insert(ip.as_str());
+        }
+    }
+
     for app in fleet.apps.values() {
         let Some(ref routing) = app.routing else {
             continue;
@@ -227,10 +237,6 @@ async fn check_dns(fleet: &Fleet, filtered: &HashMap<String, Server>) {
                 }
             }
         }
-    }
-
-    if routes.is_empty() {
-        return;
     }
 
     ui::header("DNS");
