@@ -142,10 +142,14 @@ pub enum ServerCommand {
         name: String,
     },
 
-    /// Verify a server is properly set up
+    /// Verify a server is properly set up (re-runs Ansible)
     Check {
         /// Server name (checks all if omitted)
         name: Option<String>,
+
+        /// SSH user for Ansible connection
+        #[arg(long, default_value = "root")]
+        ssh_user: String,
     },
 }
 

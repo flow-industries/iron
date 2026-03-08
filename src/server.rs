@@ -70,7 +70,9 @@ pub async fn run(config_path: &str, command: ServerCommand) -> Result<()> {
             .await
         }
         ServerCommand::Remove { name } => remove(config_path, &name),
-        ServerCommand::Check { name } => check(config_path, name.as_deref()).await,
+        ServerCommand::Check { name, ssh_user } => {
+            check(config_path, name.as_deref(), &ssh_user).await
+        }
     }
 }
 
@@ -303,7 +305,7 @@ fn remove(config_path: &str, name: &str) -> Result<()> {
     Ok(())
 }
 
-async fn check(config_path: &str, name: Option<&str>) -> Result<()> {
+async fn check(config_path: &str, name: Option<&str>, ssh_user: &str) -> Result<()> {
     let config_path = Path::new(config_path);
     let fleet = crate::config::load(config_path.to_str().unwrap_or("fleet.toml"))?;
 
@@ -361,7 +363,7 @@ async fn check(config_path: &str, name: Option<&str>) -> Result<()> {
             .arg("-i")
             .arg(format!("{ip},"))
             .arg("-u")
-            .arg(&server.user)
+            .arg(ssh_user)
             .arg("-e")
             .arg(format!("ssh_pub_key_path={resolved_key}"))
             .current_dir(project_dir);
