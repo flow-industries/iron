@@ -56,7 +56,7 @@ pub async fn run(config_path: &str, app_name: &str, skip_confirm: bool) -> Resul
             let sp = ui::spinner(&format!("{server_name} → removing Caddy config..."));
             pool.exec(
                 server_name,
-                &format!("sudo rm -f /opt/flow/caddy/sites/{}", app.name),
+                &format!("rm -f /opt/flow/caddy/sites/{}", app.name),
             )
             .await?;
             pool.exec(
@@ -68,8 +68,7 @@ pub async fn run(config_path: &str, app_name: &str, skip_confirm: bool) -> Resul
         }
 
         let sp = ui::spinner(&format!("{server_name} → removing app files..."));
-        pool.exec(server_name, &format!("sudo rm -rf {app_dir}"))
-            .await?;
+        pool.exec(server_name, &format!("rm -rf {app_dir}")).await?;
         sp.finish_and_clear();
 
         ui::success(&format!("{server_name} → {app_name} removed"));
