@@ -196,7 +196,10 @@ async fn add(
         format!("{name}.{domain}")
     };
 
-    let project_dir = config_path.parent().unwrap_or(Path::new("."));
+    let project_dir = config_path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
 
     let ansible_dir = project_dir.join("ansible");
     if !ansible_dir.join("setup.yml").exists() {
