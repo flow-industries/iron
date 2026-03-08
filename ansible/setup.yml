@@ -29,15 +29,6 @@
         key: "{{ lookup('file', ssh_pub_key_path) }}"
         state: present
 
-    - name: Grant deploy user passwordless sudo
-      ansible.builtin.copy:
-        dest: "/etc/sudoers.d/{{ deploy_user }}"
-        content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL\n"
-        owner: root
-        group: root
-        mode: "0440"
-        validate: "visudo -cf %s"
-
   roles:
     - devsec.hardening.os_hardening
     - devsec.hardening.ssh_hardening

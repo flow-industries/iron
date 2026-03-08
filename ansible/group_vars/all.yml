@@ -23,3 +23,6 @@ fail2ban_services:
 # Unattended upgrades (hifis.toolkit.unattended_upgrades)
 unattended_automatic_reboot: true
 unattended_automatic_reboot_time: "04:00"
+
+# SSH hardening (devsec.hardening.ssh_hardening)
+ssh_permit_root_login: "without-password"

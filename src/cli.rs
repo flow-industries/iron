@@ -148,7 +148,7 @@ pub enum ServerCommand {
         name: Option<String>,
 
         /// SSH user for Ansible connection
-        #[arg(long, default_value = "deploy")]
+        #[arg(long, default_value = "root")]
         ssh_user: String,
     },
 }
