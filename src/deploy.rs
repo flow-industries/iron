@@ -45,8 +45,7 @@ pub async fn run(fleet: &Fleet, app_filter: Option<&str>) -> Result<()> {
     }
     sp.finish_and_clear();
 
-    if let (Some(username), Some(token)) =
-        (&fleet.secrets.ghcr_username, &fleet.secrets.ghcr_token)
+    if let (Some(username), Some(token)) = (&fleet.secrets.ghcr_username, &fleet.secrets.ghcr_token)
     {
         let sp = ui::spinner("Logging in to GHCR...");
         for server_name in &needed_servers {

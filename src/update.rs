@@ -20,7 +20,11 @@ pub async fn run() -> Result<()> {
 
     println!("Updating flow CLI...\n");
     let status = tokio::process::Command::new(&cargo)
-        .args(["install", "flow-iron"])
+        .args([
+            "install",
+            "--git",
+            "https://github.com/flow-industries/iron",
+        ])
         .status()
         .await
         .context("Failed to run cargo install")?;
