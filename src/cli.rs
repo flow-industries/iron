@@ -145,20 +145,6 @@ pub enum ServerCommand {
         /// Server name to remove
         name: String,
     },
-
-    /// Verify server setup and update infrastructure containers
-    Check {
-        /// Server name (checks all if omitted)
-        name: Option<String>,
-
-        /// SSH user for Ansible connection
-        #[arg(long, default_value = "root")]
-        ssh_user: String,
-
-        /// Re-run Ansible hardening playbook
-        #[arg(long)]
-        with_hardening: bool,
-    },
 }
 
 #[derive(Subcommand)]

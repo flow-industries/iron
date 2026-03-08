@@ -30,6 +30,18 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
         };
         ui::header(&display);
 
+        if let Err(e) = crate::server::deploy_infra(
+            &pool,
+            server_name,
+            &fleet.network,
+            fleet.secrets.ghcr_username.as_deref(),
+            fleet.secrets.ghcr_token.as_deref(),
+        )
+        .await
+        {
+            ui::error(&format!("Infra error: {e}"));
+        }
+
         let apps = apps_by_server
             .get(server_name.as_str())
             .cloned()

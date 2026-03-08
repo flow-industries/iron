@@ -74,11 +74,6 @@ pub async fn run(config_path: &str, command: ServerCommand) -> Result<()> {
             .await
         }
         ServerCommand::Remove { name } => remove(config_path, &name),
-        ServerCommand::Check {
-            name,
-            ssh_user,
-            with_hardening,
-        } => check(config_path, name.as_deref(), &ssh_user, with_hardening).await,
     }
 }
 
@@ -199,7 +194,7 @@ fn generate_wud_compose(ghcr_username: &str, ghcr_token: &str) -> String {
     )
 }
 
-async fn deploy_infra(
+pub async fn deploy_infra(
     pool: &SshPool,
     server_name: &str,
     network: &str,
@@ -416,64 +411,6 @@ fn remove(config_path: &str, name: &str) -> Result<()> {
 
     remove_server_from_config(config_path, name)?;
     ui::success(&format!("Server '{name}' removed"));
-    Ok(())
-}
-
-async fn check(
-    config_path: &str,
-    name: Option<&str>,
-    _ssh_user: &str,
-    with_hardening: bool,
-) -> Result<()> {
-    if with_hardening {
-        run_hardening(config_path, name).await?;
-    }
-
-    let config_path = Path::new(config_path);
-    let fleet = crate::config::load(config_path.to_str().unwrap_or("fleet.toml"))?;
-
-    let env_path = config_path.with_file_name("fleet.env.toml");
-    let (ghcr_token, ghcr_username) = if env_path.exists() {
-        let env_content = std::fs::read_to_string(&env_path)
-            .with_context(|| format!("Failed to read {}", env_path.display()))?;
-        let env_config: EnvConfig = toml::from_str(&env_content)
-            .with_context(|| format!("Failed to parse {}", env_path.display()))?;
-        (
-            env_config.fleet.ghcr_token.filter(|t| !t.is_empty()),
-            env_config.fleet.ghcr_username.filter(|t| !t.is_empty()),
-        )
-    } else {
-        (None, None)
-    };
-
-    let servers_to_check: Vec<(String, Server)> = if let Some(name) = name {
-        let server = fleet
-            .servers
-            .get(name)
-            .with_context(|| format!("Server '{name}' not found"))?;
-        vec![(name.to_string(), server.clone())]
-    } else {
-        fleet
-            .servers
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect()
-    };
-
-    for (name, server) in &servers_to_check {
-        ui::header(&format!("Infrastructure: {name}"));
-        let pool = SshPool::connect_one(name, server).await?;
-        deploy_infra(
-            &pool,
-            name,
-            &fleet.network,
-            ghcr_username.as_deref(),
-            ghcr_token.as_deref(),
-        )
-        .await?;
-        pool.close().await?;
-    }
-
     Ok(())
 }
 
