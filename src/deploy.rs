@@ -45,6 +45,20 @@ pub async fn run(fleet: &Fleet, app_filter: Option<&str>) -> Result<()> {
     }
     sp.finish_and_clear();
 
+    if let (Some(username), Some(token)) =
+        (&fleet.secrets.ghcr_username, &fleet.secrets.ghcr_token)
+    {
+        let sp = ui::spinner("Logging in to GHCR...");
+        for server_name in &needed_servers {
+            pool.exec(
+                server_name,
+                &format!("echo '{token}' | docker login ghcr.io -u {username} --password-stdin"),
+            )
+            .await?;
+        }
+        sp.finish_and_clear();
+    }
+
     for app in &apps {
         deploy_app(fleet, app, &pool).await?;
     }

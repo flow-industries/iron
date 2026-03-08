@@ -512,7 +512,11 @@ pub fn write_server_to_config(
 
     let servers = doc
         .entry("servers")
-        .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()))
+        .or_insert_with(|| {
+            let mut t = toml_edit::Table::new();
+            t.set_implicit(true);
+            toml_edit::Item::Table(t)
+        })
         .as_table_mut()
         .context("'servers' is not a table")?;
 

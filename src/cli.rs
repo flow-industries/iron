@@ -162,7 +162,7 @@ pub enum AppCommand {
         image: String,
 
         /// Server(s) to deploy to (must exist in fleet.toml, repeatable)
-        #[arg(long, required = true, num_args = 1..)]
+        #[arg(long, required = true)]
         server: Vec<String>,
 
         /// Container port (required if routing is used)
