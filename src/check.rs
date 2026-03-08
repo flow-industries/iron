@@ -175,7 +175,7 @@ async fn check_stale(
 
     let on_disk: Vec<&str> = output
         .lines()
-        .filter(|l| !l.is_empty() && *l != "caddy")
+        .filter(|l| !l.is_empty() && *l != "caddy" && *l != "wud")
         .collect();
 
     let mut found_stale = false;
