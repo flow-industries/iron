@@ -20,6 +20,7 @@ pub async fn run() -> Result<()> {
 
     println!("Updating flow CLI...\n");
     let status = tokio::process::Command::new(&cargo)
+        .env("CARGO_NET_GIT_FETCH_WITH_CLI", "true")
         .args([
             "install",
             "--git",
