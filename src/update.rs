@@ -18,13 +18,12 @@ pub async fn run() -> Result<()> {
         .map(|s| s.trim().to_string())
         .context("cargo not found — install Rust via https://rustup.rs")?;
 
-    let sp = ui::spinner("Updating flow CLI...");
+    println!("Updating flow CLI...\n");
     let status = tokio::process::Command::new(&cargo)
         .args(["install", "flow-iron"])
         .status()
         .await
         .context("Failed to run cargo install")?;
-    sp.finish_and_clear();
 
     if !status.success() {
         bail!("cargo install flow-iron failed");
