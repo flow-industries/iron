@@ -23,7 +23,7 @@ pub async fn run() -> Result<()> {
         .args([
             "install",
             "--git",
-            "https://github.com/flow-industries/iron",
+            "ssh://git@github.com/flow-industries/iron",
         ])
         .status()
         .await
