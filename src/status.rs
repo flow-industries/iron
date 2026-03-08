@@ -1,5 +1,7 @@
 use anyhow::Result;
-use comfy_table::{Table, modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL_CONDENSED};
+use comfy_table::{
+    ContentArrangement, Table, modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL_CONDENSED,
+};
 use console::style;
 use std::collections::HashMap;
 
@@ -37,6 +39,7 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
         table
             .load_preset(UTF8_FULL_CONDENSED)
             .apply_modifier(UTF8_ROUND_CORNERS)
+            .set_content_arrangement(ContentArrangement::Dynamic)
             .set_header(vec![
                 style("Container").bold().to_string(),
                 style("Status").bold().to_string(),
