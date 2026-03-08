@@ -3,7 +3,11 @@ use std::path::Path;
 
 use crate::cli::ServerCommand;
 use crate::config::{EnvConfig, FleetConfig, Server};
+use crate::ssh::SshPool;
 use crate::ui;
+
+const CADDY_COMPOSE: &str = include_str!("../stacks/caddy/docker-compose.yml");
+const ROLLOUT_SCRIPT: &str = include_str!("../stacks/wud/rollout.sh");
 
 fn expand_tilde(path: &str) -> String {
     if let Some(rest) = path.strip_prefix("~/") {
@@ -167,6 +171,90 @@ async fn resolve_command(name: &str) -> Option<String> {
     }
 }
 
+fn generate_wud_compose(ghcr_username: &str, ghcr_token: &str) -> String {
+    format!(
+        r#"services:
+  wud:
+    image: getwud/wud:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker:ro
+      - /usr/libexec/docker/cli-plugins:/usr/libexec/docker/cli-plugins:ro
+      - /opt/flow:/opt/flow:ro
+      - ./rollout.sh:/rollout.sh:ro
+    environment:
+      WUD_WATCHER_LOCAL_CRON: "*/5 * * * *"
+      WUD_WATCHER_LOCAL_WATCHBYDEFAULT: "false"
+      WUD_REGISTRY_GHCR_FLOW_URL: https://ghcr.io
+      WUD_REGISTRY_GHCR_FLOW_USERNAME: {ghcr_username}
+      WUD_REGISTRY_GHCR_FLOW_TOKEN: {ghcr_token}
+      WUD_TRIGGER_COMMAND_ROLLOUT_CMD: /rollout.sh
+      WUD_TRIGGER_COMMAND_ROLLOUT_SHELL: /bin/sh
+      WUD_TRIGGER_COMMAND_ROLLOUT_TIMEOUT: "120000"
+      WUD_TRIGGER_DOCKER_GAMEUPDATE_PRUNE: "true"
+    restart: always
+"#
+    )
+}
+
+async fn deploy_infra(
+    pool: &SshPool,
+    server_name: &str,
+    network: &str,
+    ghcr_username: Option<&str>,
+    ghcr_token: Option<&str>,
+) -> Result<()> {
+    let sp = ui::spinner("Setting up infrastructure containers...");
+
+    pool.exec(
+        server_name,
+        &format!("docker network create {network} 2>/dev/null || true"),
+    )
+    .await?;
+
+    pool.exec(
+        server_name,
+        "sudo mkdir -p /opt/flow/caddy/sites /opt/flow/wud",
+    )
+    .await?;
+
+    pool.upload_file(
+        server_name,
+        "/opt/flow/caddy/docker-compose.yml",
+        CADDY_COMPOSE,
+    )
+    .await?;
+
+    pool.exec(server_name, "cd /opt/flow/caddy && docker compose up -d")
+        .await?;
+
+    if let (Some(username), Some(token)) = (ghcr_username, ghcr_token) {
+        let wud_compose = generate_wud_compose(username, token);
+        pool.upload_file(
+            server_name,
+            "/opt/flow/wud/docker-compose.yml",
+            &wud_compose,
+        )
+        .await?;
+        pool.upload_file(server_name, "/opt/flow/wud/rollout.sh", ROLLOUT_SCRIPT)
+            .await?;
+        pool.exec(server_name, "chmod +x /opt/flow/wud/rollout.sh")
+            .await?;
+        pool.exec(server_name, "cd /opt/flow/wud && docker compose up -d")
+            .await?;
+        sp.finish_and_clear();
+        ui::success("Caddy + WUD started");
+    } else {
+        sp.finish_and_clear();
+        ui::success("Caddy started");
+        ui::error(
+            "WUD skipped: set ghcr_username in fleet.toml and ghcr_token via `flow login gh`",
+        );
+    }
+
+    Ok(())
+}
+
 async fn add(
     config_path: &str,
     name: &str,
@@ -274,6 +362,24 @@ async fn add(
     if !status.success() {
         bail!("Ansible setup failed (exit code: {status})");
     }
+
+    ui::header("Infrastructure");
+    let server_entry = Server {
+        host: hostname.clone(),
+        ip: Some(ip.to_string()),
+        user: user.to_string(),
+        ssh_key: cli_ssh_key.map(String::from),
+    };
+    let pool = SshPool::connect_one(name, &server_entry).await?;
+    deploy_infra(
+        &pool,
+        name,
+        &config.network,
+        config.ghcr_username.as_deref(),
+        ghcr_token.as_deref(),
+    )
+    .await?;
+    pool.close().await?;
 
     write_server_to_config(config_path, name, &hostname, ip, user, cli_ssh_key)?;
     ui::success(&format!("Server '{name}' added and bootstrapped"));
@@ -386,7 +492,18 @@ async fn check(config_path: &str, name: Option<&str>, ssh_user: &str) -> Result<
             .context("Failed to run ansible-playbook")?;
 
         if status.success() {
-            ui::success(&format!("Server '{name}' is up to date"));
+            ui::success(&format!("Server '{name}' Ansible up to date"));
+
+            let pool = SshPool::connect_one(name, server).await?;
+            deploy_infra(
+                &pool,
+                name,
+                &fleet.network,
+                fleet.ghcr_username.as_deref(),
+                ghcr_token.as_deref(),
+            )
+            .await?;
+            pool.close().await?;
         } else {
             ui::error(&format!("Server '{name}' check failed"));
         }

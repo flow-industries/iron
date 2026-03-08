@@ -21,6 +21,10 @@ pub async fn run(config_path: &str) -> Result<()> {
         doc["domain"] = toml_edit::value(domain);
     }
 
+    if let Some(username) = ui::prompt("GitHub org/username for GHCR (e.g. flow-industries):") {
+        doc["ghcr_username"] = toml_edit::value(username);
+    }
+
     if let Some(zone_id) = ui::prompt("Cloudflare zone ID (skip if not using DNS):") {
         doc["cloudflare_zone_id"] = toml_edit::value(zone_id);
 
