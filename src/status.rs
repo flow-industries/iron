@@ -1,6 +1,7 @@
 use anyhow::Result;
 use comfy_table::{
-    ContentArrangement, Table, modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL_CONDENSED,
+    ColumnConstraint, ContentArrangement, Table, Width, modifiers::UTF8_ROUND_CORNERS,
+    presets::UTF8_FULL_CONDENSED,
 };
 use console::style;
 use std::collections::HashMap;
@@ -35,11 +36,14 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
             )
             .await?;
 
+        let term_width = console::Term::stdout().size().1;
+
         let mut table = Table::new();
         table
             .load_preset(UTF8_FULL_CONDENSED)
             .apply_modifier(UTF8_ROUND_CORNERS)
             .set_content_arrangement(ContentArrangement::Dynamic)
+            .set_width(term_width)
             .set_header(vec![
                 style("Container").bold().to_string(),
                 style("Status").bold().to_string(),
@@ -47,6 +51,9 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
                 style("Ports").bold().to_string(),
                 style("Size").bold().to_string(),
             ]);
+
+        let max = |pct: u16| ColumnConstraint::UpperBoundary(Width::Percentage(pct));
+        table.set_constraints(vec![max(15), max(15), max(20), max(35), max(15)]);
 
         for line in output.lines() {
             if line.is_empty() {
