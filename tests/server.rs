@@ -89,11 +89,11 @@ user = "deploy"
     let result = rt.block_on(iron::server::run(
         fleet_path.to_str().unwrap(),
         iron::cli::ServerCommand::Add {
-            name: "flow-1".to_string(),
-            ip: "10.0.0.1".to_string(),
+            name: Some("flow-1".to_string()),
+            ip: Some("10.0.0.1".to_string()),
             host: None,
-            user: "deploy".to_string(),
-            ssh_user: "root".to_string(),
+            user: Some("deploy".to_string()),
+            ssh_user: Some("root".to_string()),
             ssh_key: None,
         },
     ));

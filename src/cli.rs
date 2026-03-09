@@ -117,26 +117,26 @@ pub enum LoginCommand {
 
 #[derive(Subcommand)]
 pub enum ServerCommand {
-    /// Add a new server and run Ansible to bootstrap it
+    /// Add a new server and run Ansible to bootstrap it (interactive wizard if no args given)
     Add {
         /// Server name (used as identifier in fleet.toml)
-        name: String,
+        name: Option<String>,
 
         /// Server IP address
         #[arg(long)]
-        ip: String,
+        ip: Option<String>,
 
         /// Override hostname (default: {name}.{domain})
         #[arg(long)]
         host: Option<String>,
 
         /// Deploy user (created by Ansible, used for future SSH)
-        #[arg(long, default_value = "deploy")]
-        user: String,
+        #[arg(long)]
+        user: Option<String>,
 
         /// SSH user for initial Ansible connection
-        #[arg(long, default_value = "root")]
-        ssh_user: String,
+        #[arg(long)]
+        ssh_user: Option<String>,
 
         /// Path to SSH public key for the deploy user
         #[arg(long)]

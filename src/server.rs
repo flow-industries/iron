@@ -62,6 +62,16 @@ pub async fn run(config_path: &str, command: ServerCommand) -> Result<()> {
             ssh_user,
             ssh_key,
         } => {
+            let interactive = name.is_none() && ip.is_none();
+            let (name, ip, host, user, ssh_user, ssh_key) = if interactive {
+                interactive_add(config_path)?
+            } else {
+                let name = name.context("Server name is required")?;
+                let ip = ip.context("--ip is required")?;
+                let user = user.unwrap_or_else(|| "deploy".to_string());
+                let ssh_user = ssh_user.unwrap_or_else(|| "root".to_string());
+                (name, ip, host, user, ssh_user, ssh_key)
+            };
             add(
                 config_path,
                 &name,
@@ -75,6 +85,52 @@ pub async fn run(config_path: &str, command: ServerCommand) -> Result<()> {
         }
         ServerCommand::Remove { name } => remove(config_path, &name),
     }
+}
+
+#[allow(clippy::type_complexity)]
+fn interactive_add(
+    config_path: &str,
+) -> Result<(
+    String,
+    String,
+    Option<String>,
+    String,
+    String,
+    Option<String>,
+)> {
+    let config_path_p = Path::new(config_path);
+    let content = std::fs::read_to_string(config_path_p)
+        .with_context(|| format!("Failed to read {}", config_path_p.display()))?;
+    let config: FleetConfig = toml::from_str(&content)
+        .with_context(|| format!("Failed to parse {}", config_path_p.display()))?;
+
+    ui::header("Add server");
+
+    let Some(name) = ui::prompt("Server name:") else {
+        bail!("Server name is required");
+    };
+
+    let Some(ip) = ui::prompt("Server IP address:") else {
+        bail!("IP address is required");
+    };
+
+    let default_host = config.domain.as_ref().map(|d| format!("{name}.{d}"));
+    let host_prompt = if let Some(ref default) = default_host {
+        format!("Hostname (empty for {default}):")
+    } else {
+        "Hostname:".to_string()
+    };
+    let host = ui::prompt(&host_prompt);
+
+    let user =
+        ui::prompt("Deploy user (empty for deploy):").unwrap_or_else(|| "deploy".to_string());
+
+    let ssh_user = ui::prompt("SSH user for initial setup (empty for root):")
+        .unwrap_or_else(|| "root".to_string());
+
+    let ssh_key = ui::prompt("SSH public key path (empty to auto-detect):");
+
+    Ok((name, ip, host, user, ssh_user, ssh_key))
 }
 
 async fn ensure_ansible(project_dir: &Path) -> Result<String> {
