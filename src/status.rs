@@ -1,9 +1,8 @@
 use anyhow::Result;
 use comfy_table::{
-    ColumnConstraint, ContentArrangement, Table, Width, modifiers::UTF8_ROUND_CORNERS,
+    Cell, CellAlignment, Color, ContentArrangement, Table, modifiers::UTF8_ROUND_CORNERS,
     presets::UTF8_FULL_CONDENSED,
 };
-use console::style;
 use std::collections::HashMap;
 
 use crate::config::Fleet;
@@ -36,24 +35,12 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
             )
             .await?;
 
-        let term_width = console::Term::stdout().size().1;
-
         let mut table = Table::new();
         table
             .load_preset(UTF8_FULL_CONDENSED)
             .apply_modifier(UTF8_ROUND_CORNERS)
             .set_content_arrangement(ContentArrangement::Dynamic)
-            .set_width(term_width)
-            .set_header(vec![
-                style("Container").bold().to_string(),
-                style("Status").bold().to_string(),
-                style("Image").bold().to_string(),
-                style("Ports").bold().to_string(),
-                style("Size").bold().to_string(),
-            ]);
-
-        let max = |pct: u16| ColumnConstraint::UpperBoundary(Width::Percentage(pct));
-        table.set_constraints(vec![max(15), max(15), max(20), max(35), max(15)]);
+            .set_header(vec!["Container", "Status", "Image", "Ports", "Size"]);
 
         for line in output.lines() {
             if line.is_empty() {
@@ -61,17 +48,17 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
             }
             let parts: Vec<&str> = line.splitn(5, '\t').collect();
             if parts.len() == 5 {
-                let status_colored = if parts[1].starts_with("Up") {
-                    style(parts[1]).green().to_string()
+                let status_color = if parts[1].starts_with("Up") {
+                    Color::Green
                 } else {
-                    style(parts[1]).red().to_string()
+                    Color::Red
                 };
                 table.add_row(vec![
-                    parts[0].to_string(),
-                    status_colored,
-                    parts[2].to_string(),
-                    parts[3].to_string(),
-                    parts[4].to_string(),
+                    Cell::new(parts[0]),
+                    Cell::new(parts[1]).fg(status_color),
+                    Cell::new(parts[2]),
+                    Cell::new(parts[3]),
+                    Cell::new(parts[4]).set_alignment(CellAlignment::Right),
                 ]);
             }
         }
