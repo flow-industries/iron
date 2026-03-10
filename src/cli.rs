@@ -102,6 +102,12 @@ pub enum Command {
         command: Option<LoginCommand>,
     },
 
+    /// Manage environment variables in fleet.env.toml
+    Env {
+        /// [app] [key=value...] — list/set env vars
+        args: Vec<String>,
+    },
+
     /// Update flow CLI to the latest version
     Update,
 }

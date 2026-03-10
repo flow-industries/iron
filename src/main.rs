@@ -46,6 +46,7 @@ async fn main() -> Result<()> {
         Command::Init => iron::init::run(&cli.config).await,
         Command::Server { command } => iron::server::run(&cli.config, command).await,
         Command::App { command } => iron::app::run(&cli.config, command),
+        Command::Env { args } => iron::env::run(&cli.config, &args),
         Command::Login { command } => iron::login::run(&cli.config, command.as_ref()).await,
         Command::Update => iron::update::run().await,
     }

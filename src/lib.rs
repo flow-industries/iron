@@ -8,6 +8,7 @@ pub mod cloudflare;
 pub mod compose;
 pub mod config;
 pub mod deploy;
+pub mod env;
 pub mod init;
 pub mod login;
 pub mod logs;
