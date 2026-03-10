@@ -17,6 +17,10 @@ pub enum Command {
     Deploy {
         /// App name to deploy (deploys all if omitted)
         app: Option<String>,
+
+        /// Force recreate containers instead of rolling deploy
+        #[arg(long)]
+        force: bool,
     },
 
     /// Verify fleet.toml matches reality on servers

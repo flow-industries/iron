@@ -7,7 +7,7 @@ use crate::config::{DeployStrategy, Fleet, ResolvedApp};
 use crate::ssh::SshPool;
 use crate::ui;
 
-pub async fn run(fleet: &Fleet, app_filter: Option<&str>) -> Result<()> {
+pub async fn run(fleet: &Fleet, app_filter: Option<&str>, force: bool) -> Result<()> {
     let apps: Vec<&ResolvedApp> = if let Some(name) = app_filter {
         let app = fleet
             .apps
@@ -59,7 +59,7 @@ pub async fn run(fleet: &Fleet, app_filter: Option<&str>) -> Result<()> {
     }
 
     for app in &apps {
-        deploy_app(fleet, app, &pool).await?;
+        deploy_app(fleet, app, &pool, force).await?;
     }
 
     pool.close().await?;
@@ -67,7 +67,7 @@ pub async fn run(fleet: &Fleet, app_filter: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool) -> Result<()> {
+async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool, force: bool) -> Result<()> {
     if app.servers.is_empty() {
         bail!("App '{}' has no servers assigned", app.name);
     }
@@ -107,23 +107,31 @@ async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool) -> Result<
         sp.finish_and_clear();
 
         let sp = ui::spinner(&format!("  {server_name} → deploying..."));
-        match app.deploy_strategy {
-            DeployStrategy::Rolling => {
-                pool.exec(
-                    server_name,
-                    &format!(
-                        "docker rollout {} -f {}/docker-compose.yml",
-                        app.name, app_dir
-                    ),
-                )
-                .await?;
-            }
-            DeployStrategy::Recreate => {
-                pool.exec(
-                    server_name,
-                    &format!("cd {app_dir} && docker compose up -d"),
-                )
-                .await?;
+        if force {
+            pool.exec(
+                server_name,
+                &format!("cd {app_dir} && docker compose up -d --force-recreate"),
+            )
+            .await?;
+        } else {
+            match app.deploy_strategy {
+                DeployStrategy::Rolling => {
+                    pool.exec(
+                        server_name,
+                        &format!(
+                            "docker rollout {} -f {}/docker-compose.yml",
+                            app.name, app_dir
+                        ),
+                    )
+                    .await?;
+                }
+                DeployStrategy::Recreate => {
+                    pool.exec(
+                        server_name,
+                        &format!("cd {app_dir} && docker compose up -d"),
+                    )
+                    .await?;
+                }
             }
         }
         sp.finish_and_clear();
