@@ -51,7 +51,7 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
             let port = app.port.unwrap_or(3000);
             out.push_str("    healthcheck:\n");
             out.push_str(&format!(
-                "      test: [\"CMD\", \"wget\", \"--spider\", \"-q\", \"http://localhost:{port}{health_path}\"]\n"
+                "      test: [\"CMD\", \"wget\", \"--spider\", \"-q\", \"http://127.0.0.1:{port}{health_path}\"]\n"
             ));
             out.push_str("      interval: 10s\n");
             out.push_str("      timeout: 5s\n");
