@@ -84,7 +84,8 @@ async fn follow_inner(
         } else {
             String::new()
         };
-        print!("\x1b[H{buf}{hint}\x1b[J");
+        let cleared = buf.replace('\n', "\x1b[K\n");
+        print!("\x1b[H{cleared}{hint}\x1b[K\x1b[J");
         std::io::stdout().flush()?;
 
         loop {
