@@ -73,12 +73,12 @@ fn build_server_app_map<'a>(
     map
 }
 
-fn expected_containers(app: &ResolvedApp) -> Vec<(String, &str)> {
-    let mut names = vec![(format!("{}-{}-1", app.name, app.name), app.name.as_str())];
+fn expected_container_prefixes(app: &ResolvedApp) -> Vec<(String, &str)> {
+    let mut prefixes = vec![(format!("{}-{}-", app.name, app.name), app.name.as_str())];
     for svc in &app.services {
-        names.push((format!("{}-{}-1", app.name, svc.name), svc.name.as_str()));
+        prefixes.push((format!("{}-{}-", app.name, svc.name), svc.name.as_str()));
     }
-    names
+    prefixes
 }
 
 async fn check_server(
@@ -106,12 +106,15 @@ async fn check_containers(pool: &SshPool, server: &str, apps: &[&ResolvedApp]) -
 
     println!();
     for app in apps {
-        for (container, label) in expected_containers(app) {
-            match running.get(container.as_str()) {
-                Some(status) if status.starts_with("Up") => {
+        for (prefix, label) in expected_container_prefixes(app) {
+            let match_result = running
+                .iter()
+                .find(|(name, _)| name.starts_with(prefix.as_str()));
+            match match_result {
+                Some((_, status)) if status.starts_with("Up") => {
                     ui::success(&format!("{label} running"));
                 }
-                Some(status) => {
+                Some((_, status)) => {
                     ui::error(&format!("{label} not running ({status})"));
                 }
                 None => {
