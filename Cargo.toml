@@ -34,6 +34,8 @@ console = "0.15"
 comfy-table = "7"
 serde_json = "1"
 toml_edit = "0.22"
+crossterm = { version = "0.28", features = ["event-stream"] }
+futures = { version = "0.3", default-features = false }
 
 [dev-dependencies]
 tempfile = "3.26.0"

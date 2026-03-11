@@ -43,6 +43,18 @@ pub enum Command {
         /// Keep refreshing every second
         #[arg(short = 'f', long)]
         follow: bool,
+
+        /// Show image column
+        #[arg(long)]
+        image: bool,
+
+        /// Show ports column
+        #[arg(long)]
+        ports: bool,
+
+        /// Show size column
+        #[arg(long)]
+        size: bool,
     },
 
     /// Tail logs from an app
