@@ -3,13 +3,15 @@ use comfy_table::{
     Cell, CellAlignment, Color, ContentArrangement, Table, modifiers::UTF8_ROUND_CORNERS,
     presets::UTF8_FULL_CONDENSED,
 };
+use console::Term;
 use std::collections::HashMap;
+use std::time::Duration;
 
 use crate::config::Fleet;
 use crate::ssh::SshPool;
 use crate::ui;
 
-pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
+pub async fn run(fleet: &Fleet, server_filter: Option<&str>, follow: bool) -> Result<()> {
     let filtered: HashMap<String, _> = fleet
         .servers
         .iter()
@@ -25,7 +27,25 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
     let pool = SshPool::connect(&filtered).await?;
     sp.finish_and_clear();
 
-    for name in filtered.keys() {
+    if follow {
+        let term = Term::stdout();
+        loop {
+            term.clear_screen()?;
+            print_status(&pool, &filtered).await?;
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    } else {
+        print_status(&pool, &filtered).await?;
+        pool.close().await?;
+        Ok(())
+    }
+}
+
+async fn print_status(
+    pool: &SshPool,
+    servers: &HashMap<String, crate::config::Server>,
+) -> Result<()> {
+    for name in servers.keys() {
         ui::header(&format!("Server: {name}"));
 
         let output = pool
@@ -65,7 +85,5 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
 
         println!("{table}");
     }
-
-    pool.close().await?;
     Ok(())
 }

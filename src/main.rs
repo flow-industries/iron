@@ -22,9 +22,9 @@ async fn main() -> Result<()> {
             let fleet = iron::config::load(&cli.config)?;
             iron::deploy::run(&fleet, app.as_deref(), force).await
         }
-        Command::Status { server } => {
+        Command::Status { server, follow } => {
             let fleet = iron::config::load(&cli.config)?;
-            iron::status::run(&fleet, server.as_deref()).await
+            iron::status::run(&fleet, server.as_deref(), follow).await
         }
         Command::Logs {
             app,

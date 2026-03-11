@@ -39,6 +39,10 @@ pub enum Command {
         /// Filter by server name
         #[arg(long)]
         server: Option<String>,
+
+        /// Keep refreshing every second
+        #[arg(short = 'f', long)]
+        follow: bool,
     },
 
     /// Tail logs from an app
