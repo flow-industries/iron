@@ -207,11 +207,11 @@ async fn check_dns(fleet: &Fleet, filtered: &HashMap<String, Server>) {
         _ => return,
     };
 
-    let mut routes: HashMap<&str, HashSet<&str>> = HashMap::new();
+    let mut dns_entries: HashMap<&str, HashSet<&str>> = HashMap::new();
 
     for server in filtered.values() {
         if let Some(ref ip) = server.ip {
-            routes
+            dns_entries
                 .entry(server.host.as_str())
                 .or_default()
                 .insert(ip.as_str());
@@ -228,9 +228,9 @@ async fn check_dns(fleet: &Fleet, filtered: &HashMap<String, Server>) {
             }
             if let Some(server) = fleet.servers.get(server_name.as_str()) {
                 if let Some(ref ip) = server.ip {
-                    for route in &routing.routes {
-                        routes
-                            .entry(route.as_str())
+                    for domain in &routing.domains {
+                        dns_entries
+                            .entry(domain.as_str())
                             .or_default()
                             .insert(ip.as_str());
                     }
@@ -244,7 +244,7 @@ async fn check_dns(fleet: &Fleet, filtered: &HashMap<String, Server>) {
     let client = reqwest::Client::new();
     let mut zone_cache: HashMap<String, Option<String>> = HashMap::new();
 
-    for (hostname, valid_ips) in &routes {
+    for (hostname, valid_ips) in &dns_entries {
         let zone_name = crate::cloudflare::extract_zone(hostname);
 
         let zone_id = if let Some(cached) = zone_cache.get(&zone_name) {

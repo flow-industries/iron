@@ -63,7 +63,7 @@ pub enum DeployStrategy {
 #[serde(deny_unknown_fields)]
 pub struct Routing {
     #[serde(default)]
-    pub routes: Vec<String>,
+    pub domains: Vec<String>,
     pub health_path: Option<String>,
     pub health_interval: Option<String>,
 }
@@ -165,7 +165,7 @@ fn validate(config: &FleetConfig) -> Result<()> {
         }
     }
 
-    let mut all_routes: Vec<(&str, &str)> = Vec::new();
+    let mut all_domains: Vec<(&str, &str)> = Vec::new();
 
     for (app_name, app) in &config.apps {
         if app.servers.is_empty() {
@@ -202,24 +202,24 @@ fn validate(config: &FleetConfig) -> Result<()> {
         }
 
         if let Some(ref routing) = app.routing {
-            for route in &routing.routes {
-                if route.is_empty() {
-                    bail!("App '{app_name}' has an empty route");
+            for domain in &routing.domains {
+                if domain.is_empty() {
+                    bail!("App '{app_name}' has an empty domain");
                 }
-                if route.contains(char::is_whitespace) {
-                    bail!("App '{app_name}' has route '{route}' containing whitespace");
+                if domain.contains(char::is_whitespace) {
+                    bail!("App '{app_name}' has domain '{domain}' containing whitespace");
                 }
-                if route.contains("://") {
+                if domain.contains("://") {
                     bail!(
-                        "App '{app_name}' has route '{route}' with protocol prefix (use bare hostname)"
+                        "App '{app_name}' has domain '{domain}' with protocol prefix (use bare hostname)"
                     );
                 }
-                if !route.contains('.') {
+                if !domain.contains('.') {
                     bail!(
-                        "App '{app_name}' has route '{route}' with no domain (expected hostname like example.com)"
+                        "App '{app_name}' has domain '{domain}' with no dot (expected hostname like example.com)"
                     );
                 }
-                all_routes.push((route, app_name));
+                all_domains.push((domain, app_name));
             }
             if let Some(ref health_path) = routing.health_path {
                 if !health_path.starts_with('/') {
@@ -265,12 +265,12 @@ fn validate(config: &FleetConfig) -> Result<()> {
         }
     }
 
-    let mut seen_routes: HashMap<&str, &str> = HashMap::new();
-    for (route, app_name) in &all_routes {
-        if let Some(other_app) = seen_routes.get(route) {
-            bail!("Duplicate route '{route}' in apps '{other_app}' and '{app_name}'");
+    let mut seen_domains: HashMap<&str, &str> = HashMap::new();
+    for (domain, app_name) in &all_domains {
+        if let Some(other_app) = seen_domains.get(domain) {
+            bail!("Duplicate domain '{domain}' in apps '{other_app}' and '{app_name}'");
         }
-        seen_routes.insert(route, app_name);
+        seen_domains.insert(domain, app_name);
     }
 
     Ok(())

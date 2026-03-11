@@ -11,7 +11,7 @@ fn simple_app() -> ResolvedApp {
         port: Some(3000),
         deploy_strategy: DeployStrategy::Rolling,
         routing: Some(Routing {
-            routes: vec!["flow.industries".to_string()],
+            domains: vec!["flow.industries".to_string()],
             health_path: Some("/health".to_string()),
             health_interval: Some("5s".to_string()),
         }),
@@ -72,7 +72,7 @@ fn generate_with_sidecars() {
         port: Some(3000),
         deploy_strategy: DeployStrategy::Rolling,
         routing: Some(Routing {
-            routes: vec!["id.flow.industries".to_string()],
+            domains: vec!["id.flow.industries".to_string()],
             health_path: Some("/health".to_string()),
             health_interval: None,
         }),

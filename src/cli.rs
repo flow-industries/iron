@@ -179,9 +179,9 @@ pub enum AppCommand {
         #[arg(long)]
         port: Option<u16>,
 
-        /// Route hostname(s) for Caddy reverse proxy (repeatable)
+        /// Domain hostname(s) for Caddy reverse proxy (repeatable)
         #[arg(long)]
-        route: Vec<String>,
+        domain: Vec<String>,
 
         /// Health check path (e.g., /health)
         #[arg(long)]

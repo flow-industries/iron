@@ -155,7 +155,7 @@ async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool, force: boo
     }
 
     if let Some(ref routing) = app.routing {
-        if !routing.routes.is_empty() {
+        if !routing.domains.is_empty() {
             if let Some(ref cf_token) = fleet.secrets.cloudflare_api_token {
                 let sp = ui::spinner("  Ensuring DNS records...");
                 for server_name in &app.servers {
@@ -169,8 +169,8 @@ async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool, force: boo
                             .to_string(),
                     };
 
-                    for route in &routing.routes {
-                        cloudflare::ensure_dns_record(cf_token, route, &server_ip).await?;
+                    for domain in &routing.domains {
+                        cloudflare::ensure_dns_record(cf_token, domain, &server_ip).await?;
                     }
                 }
                 sp.finish_and_clear();

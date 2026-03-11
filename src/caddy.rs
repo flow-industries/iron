@@ -8,10 +8,10 @@ pub fn generate(app: &ResolvedApp) -> Option<String> {
     let health_interval = routing.health_interval.as_deref().unwrap_or("5s");
 
     let mut out = String::new();
-    for route in &routing.routes {
+    for domain in &routing.domains {
         out.push_str(&format!(
-            "{route} {{\n    reverse_proxy {name}:{port} {{\n        health_uri {health_path}\n        health_interval {health_interval}\n        lb_try_duration 10s\n    }}\n}}\n",
-            route = route,
+            "{domain} {{\n    reverse_proxy {name}:{port} {{\n        health_uri {health_path}\n        health_interval {health_interval}\n        lb_try_duration 10s\n    }}\n}}\n",
+            domain = domain,
             name = app.name,
             port = port,
             health_path = health_path,

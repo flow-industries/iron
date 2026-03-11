@@ -66,7 +66,7 @@ fn add_writes_app_with_routing() {
     let app = &config.apps["site"];
     assert_eq!(app.port, Some(3000));
     let routing = app.routing.as_ref().unwrap();
-    assert_eq!(routing.routes, vec!["example.com", "www.example.com"]);
+    assert_eq!(routing.domains, vec!["example.com", "www.example.com"]);
     assert_eq!(routing.health_path, Some("/health".to_string()));
     assert_eq!(routing.health_interval, Some("5s".to_string()));
 }
@@ -178,7 +178,7 @@ servers = ["flow-1"]
             image: Some("nginx:latest".to_string()),
             server: vec!["flow-1".to_string()],
             port: None,
-            route: vec![],
+            domain: vec![],
             health_path: None,
             health_interval: None,
             port_map: vec![],
@@ -202,7 +202,7 @@ fn add_rejects_unknown_server() {
             image: Some("nginx:latest".to_string()),
             server: vec!["nonexistent".to_string()],
             port: None,
-            route: vec![],
+            domain: vec![],
             health_path: None,
             health_interval: None,
             port_map: vec![],
@@ -226,7 +226,7 @@ fn add_rejects_routing_without_port() {
             image: Some("nginx:latest".to_string()),
             server: vec!["flow-1".to_string()],
             port: None,
-            route: vec!["example.com".to_string()],
+            domain: vec!["example.com".to_string()],
             health_path: None,
             health_interval: None,
             port_map: vec![],
@@ -238,7 +238,7 @@ fn add_rejects_routing_without_port() {
         result
             .unwrap_err()
             .to_string()
-            .contains("--port is required")
+            .contains("--port is required when using --domain")
     );
 }
 
@@ -255,7 +255,7 @@ fn add_rejects_routing_with_port_maps() {
             image: Some("nginx:latest".to_string()),
             server: vec!["flow-1".to_string()],
             port: Some(3000),
-            route: vec!["example.com".to_string()],
+            domain: vec!["example.com".to_string()],
             health_path: None,
             health_interval: None,
             port_map: vec!["9999:9999".to_string()],
@@ -284,7 +284,7 @@ fn add_rejects_health_without_route() {
             image: Some("nginx:latest".to_string()),
             server: vec!["flow-1".to_string()],
             port: Some(3000),
-            route: vec![],
+            domain: vec![],
             health_path: Some("/health".to_string()),
             health_interval: None,
             port_map: vec![],
@@ -296,7 +296,7 @@ fn add_rejects_health_without_route() {
         result
             .unwrap_err()
             .to_string()
-            .contains("--health-path and --health-interval require --route")
+            .contains("--health-path and --health-interval require --domain")
     );
 }
 

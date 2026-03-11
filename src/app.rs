@@ -52,7 +52,7 @@ pub fn run(config_path: &str, command: AppCommand) -> Result<()> {
             image,
             server: servers,
             port,
-            route: routes,
+            domain: domains,
             health_path,
             health_interval,
             port_map: raw_port_maps,
@@ -74,7 +74,7 @@ pub fn run(config_path: &str, command: AppCommand) -> Result<()> {
                     &image,
                     &servers,
                     port,
-                    &routes,
+                    &domains,
                     health_path.as_deref(),
                     health_interval.as_deref(),
                     &raw_port_maps,
@@ -151,7 +151,7 @@ fn interactive_add(config_path: &str) -> Result<()> {
     }
 
     let mut port = None;
-    let mut routes = Vec::new();
+    let mut domains = Vec::new();
     let mut health_path = None;
     let mut health_interval = None;
     let mut raw_port_maps = Vec::new();
@@ -163,19 +163,19 @@ fn interactive_add(config_path: &str) -> Result<()> {
         port = Some(port_str.parse::<u16>().context("Invalid port number")?);
 
         loop {
-            let label = if routes.is_empty() {
-                "Route hostname (e.g. app.example.com):"
+            let label = if domains.is_empty() {
+                "Domain (e.g. app.example.com):"
             } else {
-                "Another route (empty to finish):"
+                "Another domain (empty to finish):"
             };
-            let Some(route) = ui::prompt(label) else {
-                if routes.is_empty() {
-                    ui::error("At least one route is required");
+            let Some(domain) = ui::prompt(label) else {
+                if domains.is_empty() {
+                    ui::error("At least one domain is required");
                     continue;
                 }
                 break;
             };
-            routes.push(route);
+            domains.push(domain);
         }
 
         health_path = ui::prompt("Health check path (e.g. /health, empty to skip):");
@@ -206,7 +206,7 @@ fn interactive_add(config_path: &str) -> Result<()> {
         &image,
         &servers,
         port,
-        &routes,
+        &domains,
         health_path.as_deref(),
         health_interval.as_deref(),
         &raw_port_maps,
@@ -221,7 +221,7 @@ fn add(
     image: &str,
     servers: &[String],
     port: Option<u16>,
-    routes: &[String],
+    domains: &[String],
     health_path: Option<&str>,
     health_interval: Option<&str>,
     raw_port_maps: &[String],
@@ -243,16 +243,16 @@ fn add(
         }
     }
 
-    if !routes.is_empty() && !raw_port_maps.is_empty() {
-        bail!("Cannot use both --route and --port-map (mutually exclusive)");
+    if !domains.is_empty() && !raw_port_maps.is_empty() {
+        bail!("Cannot use both --domain and --port-map (mutually exclusive)");
     }
 
-    if !routes.is_empty() && port.is_none() {
-        bail!("--port is required when using --route");
+    if !domains.is_empty() && port.is_none() {
+        bail!("--port is required when using --domain");
     }
 
-    if routes.is_empty() && (health_path.is_some() || health_interval.is_some()) {
-        bail!("--health-path and --health-interval require --route");
+    if domains.is_empty() && (health_path.is_some() || health_interval.is_some()) {
+        bail!("--health-path and --health-interval require --domain");
     }
 
     if deploy_strategy != "rolling" && deploy_strategy != "recreate" {
@@ -270,7 +270,7 @@ fn add(
         image,
         servers,
         port,
-        routes,
+        domains,
         health_path,
         health_interval,
         &port_maps,
@@ -359,7 +359,7 @@ pub fn write_app_to_config(
     image: &str,
     servers: &[String],
     port: Option<u16>,
-    routes: &[String],
+    domains: &[String],
     health_path: Option<&str>,
     health_interval: Option<&str>,
     port_maps: &[ParsedPortMap],
@@ -394,13 +394,13 @@ pub fn write_app_to_config(
         app_table.insert("deploy_strategy", toml_edit::value(deploy_strategy));
     }
 
-    if !routes.is_empty() {
+    if !domains.is_empty() {
         let mut routing_table = toml_edit::Table::new();
-        let mut routes_array = toml_edit::Array::new();
-        for r in routes {
-            routes_array.push(r.as_str());
+        let mut domains_array = toml_edit::Array::new();
+        for d in domains {
+            domains_array.push(d.as_str());
         }
-        routing_table.insert("routes", toml_edit::value(routes_array));
+        routing_table.insert("domains", toml_edit::value(domains_array));
         if let Some(hp) = health_path {
             routing_table.insert("health_path", toml_edit::value(hp));
         }

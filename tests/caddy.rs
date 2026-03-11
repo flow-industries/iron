@@ -14,7 +14,7 @@ fn generate_caddy_fragment() {
         port: Some(3000),
         deploy_strategy: DeployStrategy::Rolling,
         routing: Some(Routing {
-            routes: vec!["flow.industries".to_string()],
+            domains: vec!["flow.industries".to_string()],
             health_path: Some("/health".to_string()),
             health_interval: Some("5s".to_string()),
         }),
@@ -47,7 +47,7 @@ fn no_fragment_without_routing() {
 }
 
 #[test]
-fn multiple_routes() {
+fn multiple_domains() {
     let app = ResolvedApp {
         name: "talk".to_string(),
         image: "test".to_string(),
@@ -55,7 +55,7 @@ fn multiple_routes() {
         port: Some(3000),
         deploy_strategy: DeployStrategy::Rolling,
         routing: Some(Routing {
-            routes: vec!["flow.talk".to_string(), "www.flow.talk".to_string()],
+            domains: vec!["flow.talk".to_string(), "www.flow.talk".to_string()],
             health_path: Some("/health".to_string()),
             health_interval: None,
         }),

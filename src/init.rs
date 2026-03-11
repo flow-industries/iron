@@ -125,11 +125,11 @@ pub async fn run(config_path: &str) -> Result<()> {
         }
 
         if port.is_some() {
-            if let Some(route) = ui::prompt("  Route / domain (e.g. example.com):") {
+            if let Some(domain) = ui::prompt("  Domain (e.g. example.com):") {
                 let mut routing = Table::new();
-                let mut routes = Array::new();
-                routes.push(&route);
-                routing["routes"] = toml_edit::value(routes);
+                let mut domains = Array::new();
+                domains.push(&domain);
+                routing["domains"] = toml_edit::value(domains);
                 app["routing"] = Item::Table(routing);
             }
         }

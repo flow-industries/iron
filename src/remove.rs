@@ -18,8 +18,8 @@ pub async fn run(config_path: &str, app_name: &str, skip_confirm: bool) -> Resul
         println!("This will remove '{app_name}':");
         println!("  Servers: {}", app.servers.join(", "));
         if let Some(ref routing) = app.routing {
-            if !routing.routes.is_empty() {
-                println!("  Routes:  {}", routing.routes.join(", "));
+            if !routing.domains.is_empty() {
+                println!("  Domains: {}", routing.domains.join(", "));
             }
         }
         println!();
@@ -41,7 +41,7 @@ pub async fn run(config_path: &str, app_name: &str, skip_confirm: bool) -> Resul
     sp.finish_and_clear();
 
     let app_dir = format!("/opt/flow/{}", app.name);
-    let has_routing = app.routing.as_ref().is_some_and(|r| !r.routes.is_empty());
+    let has_routing = app.routing.as_ref().is_some_and(|r| !r.domains.is_empty());
 
     for server_name in &app.servers {
         let sp = ui::spinner(&format!("{server_name} → stopping containers..."));
@@ -75,11 +75,11 @@ pub async fn run(config_path: &str, app_name: &str, skip_confirm: bool) -> Resul
     }
 
     if let Some(ref routing) = app.routing {
-        if !routing.routes.is_empty() {
+        if !routing.domains.is_empty() {
             if let Some(ref cf_token) = fleet.secrets.cloudflare_api_token {
                 let sp = ui::spinner("Deleting DNS records...");
-                for route in &routing.routes {
-                    cloudflare::delete_dns_record(cf_token, route).await?;
+                for domain in &routing.domains {
+                    cloudflare::delete_dns_record(cf_token, domain).await?;
                 }
                 sp.finish_and_clear();
                 ui::success("DNS records deleted");

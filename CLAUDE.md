@@ -51,7 +51,7 @@ flow logs site --server flow-1
 
 # App management (modifies fleet.toml only, run flow deploy afterward)
 flow app add site --image ghcr.io/org/site:latest --server flow-1 --port 3000 \
-    --route flow.industries --health-path /health --health-interval 5s
+    --domain flow.industries --health-path /health --health-interval 5s
 flow app add worker --image ghcr.io/org/worker:latest --server flow-1
 flow app add game --image ghcr.io/org/game:latest --server game-1 \
     --deploy-strategy recreate --port-map 9999:9999/tcp
@@ -87,7 +87,7 @@ ansible-galaxy install -r ansible/requirements.yml
 3. Generate `.env` file with actual secret values
 4. SSH to target server: upload files to `/opt/flow/<app>/`, pull images, rolling/recreate deploy
 5. Generate Caddy fragment, upload to `/opt/flow/caddy/sites/<app>`, reload Caddy
-6. Cloudflare API: ensure A record for each route → server IP
+6. Cloudflare API: ensure A record for each domain → server IP
 
 **Docker networking:** All HTTP services and Caddy join a shared `flow` network. Caddy reaches services by Docker DNS name (e.g., `site:3000`). Game servers use direct TCP — no Caddy.
 

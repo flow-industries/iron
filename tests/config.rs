@@ -57,7 +57,7 @@ servers = ["flow-1"]
 port = 3000
 
 [apps.site.routing]
-routes = ["flow.industries"]
+domains =["flow.industries"]
 health_path = "/health"
 health_interval = "5s"
 
@@ -73,7 +73,7 @@ protocol = "tcp"
 "#;
     let config: FleetConfig = toml::from_str(toml_str).unwrap();
     assert_eq!(
-        config.apps["site"].routing.as_ref().unwrap().routes,
+        config.apps["site"].routing.as_ref().unwrap().domains,
         vec!["flow.industries"]
     );
     assert_eq!(
@@ -179,7 +179,7 @@ image = "nginx:latest"
 servers = ["flow-1"]
 
 [apps.web.routing]
-routes = ["example.com"]
+domains =["example.com"]
 "#;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fleet.toml");
@@ -206,7 +206,7 @@ servers = ["flow-1"]
 port = 3000
 
 [apps.web.routing]
-routes = ["example.com"]
+domains =["example.com"]
 
 [[apps.web.ports]]
 internal = 9999
@@ -226,7 +226,7 @@ external = 9999
 }
 
 #[test]
-fn validate_duplicate_routes() {
+fn validate_duplicate_domains() {
     let toml_str = r#"
 [servers.flow-1]
 host = "flow-1.example.com"
@@ -237,7 +237,7 @@ servers = ["flow-1"]
 port = 3000
 
 [apps.web.routing]
-routes = ["example.com"]
+domains =["example.com"]
 
 [apps.api]
 image = "nginx:latest"
@@ -245,14 +245,14 @@ servers = ["flow-1"]
 port = 3001
 
 [apps.api.routing]
-routes = ["example.com"]
+domains =["example.com"]
 "#;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fleet.toml");
     std::fs::write(&path, toml_str).unwrap();
     let result = load(path.to_str().unwrap());
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Duplicate route"));
+    assert!(result.unwrap_err().to_string().contains("Duplicate domain"));
 }
 
 #[test]
@@ -298,7 +298,7 @@ servers = ["flow-1"]
 }
 
 #[test]
-fn validate_empty_route() {
+fn validate_empty_domain() {
     let toml_str = r#"
 [servers.flow-1]
 host = "flow-1.example.com"
@@ -309,14 +309,14 @@ servers = ["flow-1"]
 port = 3000
 
 [apps.web.routing]
-routes = [""]
+domains =[""]
 "#;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fleet.toml");
     std::fs::write(&path, toml_str).unwrap();
     let result = load(path.to_str().unwrap());
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("empty route"));
+    assert!(result.unwrap_err().to_string().contains("empty domain"));
 }
 
 #[test]
@@ -475,7 +475,7 @@ servers = ["flow-1"]
 port = 3000
 
 [apps.web.routing]
-routes = ["example.com"]
+domains =["example.com"]
 health_path = "health"
 "#;
     let dir = tempfile::tempdir().unwrap();
@@ -500,7 +500,7 @@ servers = ["flow-1"]
 port = 3000
 
 [apps.web.routing]
-routes = ["example.com"]
+domains =["example.com"]
 health_interval = "five-seconds"
 "#;
     let dir = tempfile::tempdir().unwrap();
@@ -525,7 +525,7 @@ servers = ["flow-1"]
 port = 3000
 
 [apps.web.routing]
-routes = ["example.com"]
+domains =["example.com"]
 health_interval = "{interval}"
 "#
         );
@@ -538,7 +538,7 @@ health_interval = "{interval}"
 }
 
 #[test]
-fn validate_route_with_whitespace() {
+fn validate_domain_with_whitespace() {
     let toml_str = r#"
 [servers.flow-1]
 host = "flow-1.example.com"
@@ -549,7 +549,7 @@ servers = ["flow-1"]
 port = 3000
 
 [apps.web.routing]
-routes = ["flow .industries"]
+domains =["flow .industries"]
 "#;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fleet.toml");
@@ -560,7 +560,7 @@ routes = ["flow .industries"]
 }
 
 #[test]
-fn validate_route_with_protocol() {
+fn validate_domain_with_protocol() {
     let toml_str = r#"
 [servers.flow-1]
 host = "flow-1.example.com"
@@ -571,7 +571,7 @@ servers = ["flow-1"]
 port = 3000
 
 [apps.web.routing]
-routes = ["https://flow.industries"]
+domains =["https://flow.industries"]
 "#;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fleet.toml");
@@ -582,7 +582,7 @@ routes = ["https://flow.industries"]
 }
 
 #[test]
-fn validate_route_no_dot() {
+fn validate_domain_no_dot() {
     let toml_str = r#"
 [servers.flow-1]
 host = "flow-1.example.com"
@@ -593,14 +593,14 @@ servers = ["flow-1"]
 port = 3000
 
 [apps.web.routing]
-routes = ["localhost"]
+domains =["localhost"]
 "#;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fleet.toml");
     std::fs::write(&path, toml_str).unwrap();
     let result = load(path.to_str().unwrap());
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("no domain"));
+    assert!(result.unwrap_err().to_string().contains("no dot"));
 }
 
 #[test]

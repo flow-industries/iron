@@ -53,7 +53,7 @@ flow server add srv-1 --ip 164.90.130.5
 
 # Add an app with routing
 flow app add site --image ghcr.io/org/site:latest --server srv-1 --port 3000 \
-    --route example.com --health-path /health
+    --domain example.com --health-path /health
 
 # Add a worker (no routing needed)
 flow app add worker --image ghcr.io/org/worker:latest --server srv-1
@@ -127,7 +127,7 @@ servers = ["srv-1"]
 port = 3000
 
 [apps.site.routing]
-routes = ["example.com", "www.example.com"]
+domains = ["example.com", "www.example.com"]
 health_path = "/health"
 
 [[apps.site.services]]
