@@ -77,6 +77,9 @@ async fn follow_inner(
     let mut events = EventStream::new();
     let mut show_esc_hint = false;
 
+    print!("\x1b[2J");
+    std::io::stdout().flush()?;
+
     loop {
         let buf = render_status(pool, servers, cols).await?;
         let hint = if show_esc_hint {
