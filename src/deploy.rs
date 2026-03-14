@@ -118,6 +118,11 @@ async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool, force: boo
                 DeployStrategy::Rolling => {
                     pool.exec(
                         server_name,
+                        &format!("cd {app_dir} && docker compose up -d"),
+                    )
+                    .await?;
+                    pool.exec(
+                        server_name,
                         &format!(
                             "docker rollout {} -f {}/docker-compose.yml",
                             app.name, app_dir
