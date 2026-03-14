@@ -50,8 +50,9 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
         if let Some(ref health_path) = routing.health_path {
             let port = app.port.unwrap_or(3000);
             out.push_str("    healthcheck:\n");
+            let url = format!("http://127.0.0.1:{port}{health_path}");
             out.push_str(&format!(
-                "      test: [\"CMD\", \"wget\", \"--spider\", \"-q\", \"http://127.0.0.1:{port}{health_path}\"]\n"
+                "      test: [\"CMD-SHELL\", \"curl -sf {url} > /dev/null || wget --spider -q {url}\"]\n"
             ));
             out.push_str("      interval: 10s\n");
             out.push_str("      timeout: 5s\n");
