@@ -12,6 +12,7 @@ use std::io::Write as IoWrite;
 use std::time::Duration;
 
 use crate::config::Fleet;
+use crate::ghcr::PackageRelease;
 use crate::ssh::SshPool;
 use crate::ui;
 
@@ -39,28 +40,50 @@ pub async fn run(
     }
 
     let sp = ui::spinner("Connecting...");
-    let pool = SshPool::connect(&filtered).await?;
+    let token = fleet.secrets.ghcr_token.as_deref();
+    let (pool, releases) = tokio::join!(
+        SshPool::connect(&filtered),
+        crate::ghcr::fetch_releases(token, &fleet.apps)
+    );
+    let pool = pool?;
     sp.finish_and_clear();
 
+    let release_map = build_release_map(fleet, &releases);
+
     if follow {
-        follow_loop(&pool, &filtered, &cols).await?;
+        follow_loop(&pool, &filtered, &cols, &release_map).await?;
         pool.close().await?;
     } else {
-        print_status(&pool, &filtered, &cols).await?;
+        print_status(&pool, &filtered, &cols, &release_map).await?;
         pool.close().await?;
     }
     Ok(())
+}
+
+fn build_release_map<'a>(
+    fleet: &Fleet,
+    releases: &'a HashMap<String, PackageRelease>,
+) -> HashMap<String, &'a PackageRelease> {
+    let mut map = HashMap::new();
+    for (app_name, release) in releases {
+        if fleet.apps.contains_key(app_name) {
+            let prefix = format!("{app_name}-{app_name}-");
+            map.insert(prefix, release);
+        }
+    }
+    map
 }
 
 async fn follow_loop(
     pool: &SshPool,
     servers: &HashMap<String, crate::config::Server>,
     cols: &Columns,
+    release_map: &HashMap<String, &PackageRelease>,
 ) -> Result<()> {
     crossterm::terminal::enable_raw_mode()?;
     print!("\x1b[?25l");
 
-    let result = follow_inner(pool, servers, cols).await;
+    let result = follow_inner(pool, servers, cols, release_map).await;
 
     crossterm::terminal::disable_raw_mode()?;
     print!("\x1b[?25h");
@@ -73,6 +96,7 @@ async fn follow_inner(
     pool: &SshPool,
     servers: &HashMap<String, crate::config::Server>,
     cols: &Columns,
+    release_map: &HashMap<String, &PackageRelease>,
 ) -> Result<()> {
     let mut events = EventStream::new();
     let mut show_esc_hint = false;
@@ -81,7 +105,7 @@ async fn follow_inner(
     std::io::stdout().flush()?;
 
     loop {
-        let buf = render_status(pool, servers, cols).await?;
+        let buf = render_status(pool, servers, cols, release_map).await?;
         let hint = if show_esc_hint {
             format!("\n{}", style("(press esc to quit)").dim())
         } else {
@@ -191,12 +215,15 @@ fn build_table(
     stats_map: &HashMap<String, ContainerStats>,
     order: &[String],
     cols: &Columns,
+    release_map: &HashMap<String, &PackageRelease>,
 ) -> Table {
     let mut header: Vec<Cell> = vec![
         Cell::new("Container"),
         Cell::new("Status"),
         Cell::new("CPU"),
         Cell::new("Memory"),
+        Cell::new("Latest"),
+        Cell::new("Published"),
     ];
     if cols.image {
         header.push(Cell::new("Image"));
@@ -229,11 +256,21 @@ fn build_table(
         let cpu = stats.map_or("—", |s| &s.cpu);
         let mem = stats.map_or("—", |s| &s.mem);
 
+        let release = release_map
+            .iter()
+            .find(|(prefix, _)| name.starts_with(prefix.as_str()))
+            .map(|(_, r)| *r);
+
+        let tag = release.map_or("", |r| &r.tag);
+        let published = release.map_or("", |r| &r.published);
+
         let mut row: Vec<Cell> = vec![
             Cell::new(name),
             Cell::new(&ps.status).fg(status_color),
             Cell::new(cpu).set_alignment(CellAlignment::Right),
             Cell::new(mem).set_alignment(CellAlignment::Right),
+            Cell::new(tag),
+            Cell::new(published),
         ];
         if cols.image {
             row.push(Cell::new(&ps.image));
@@ -255,6 +292,7 @@ async fn render_status(
     pool: &SshPool,
     servers: &HashMap<String, crate::config::Server>,
     cols: &Columns,
+    release_map: &HashMap<String, &PackageRelease>,
 ) -> Result<String> {
     let mut buf = String::new();
     for name in servers.keys() {
@@ -266,7 +304,7 @@ async fn render_status(
 
         let output = pool.exec(name, DOCKER_CMD).await?;
         let (ps_map, stats_map, order) = parse_output(&output);
-        let table = build_table(&ps_map, &stats_map, &order, cols);
+        let table = build_table(&ps_map, &stats_map, &order, cols, release_map);
         writeln!(buf, "{table}")?;
     }
     Ok(buf)
@@ -276,13 +314,14 @@ async fn print_status(
     pool: &SshPool,
     servers: &HashMap<String, crate::config::Server>,
     cols: &Columns,
+    release_map: &HashMap<String, &PackageRelease>,
 ) -> Result<()> {
     for name in servers.keys() {
         ui::header(&format!("Server: {name}"));
 
         let output = pool.exec(name, DOCKER_CMD).await?;
         let (ps_map, stats_map, order) = parse_output(&output);
-        let table = build_table(&ps_map, &stats_map, &order, cols);
+        let table = build_table(&ps_map, &stats_map, &order, cols, release_map);
         println!("{table}");
     }
     Ok(())
