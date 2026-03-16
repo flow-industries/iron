@@ -236,6 +236,7 @@ fn generate_wud_compose(gh_username: &str, gh_token: &str) -> String {
       - /opt/flow:/opt/flow:ro
       - ./rollout.sh:/rollout.sh:ro
     environment:
+      WUD_LOG_LEVEL: debug
       WUD_WATCHER_LOCAL_CRON: "*/5 * * * * *"
       WUD_WATCHER_LOCAL_WATCHBYDEFAULT: "false"
       WUD_WATCHER_LOCAL_JITTER: "0"
