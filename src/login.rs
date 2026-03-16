@@ -58,7 +58,7 @@ async fn github_login(env_path: &Path) -> Result<()> {
     sp.finish_and_clear();
     ui::success("Token is valid");
 
-    save_fleet_secret(env_path, "ghcr_token", &token)?;
+    save_fleet_secret(env_path, "gh_token", &token)?;
     ui::success("Saved to fleet.env.toml");
     Ok(())
 }

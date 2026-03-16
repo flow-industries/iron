@@ -110,8 +110,8 @@ pub struct AppEnv {
 
 #[derive(Debug, Deserialize, Default, Clone)]
 pub struct FleetSecrets {
-    pub ghcr_token: Option<String>,
-    pub ghcr_username: Option<String>,
+    pub gh_token: Option<String>,
+    pub gh_username: Option<String>,
     pub cloudflare_api_token: Option<String>,
 }
 

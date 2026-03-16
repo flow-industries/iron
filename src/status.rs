@@ -40,7 +40,7 @@ pub async fn run(
     }
 
     let sp = ui::spinner("Connecting...");
-    let token = fleet.secrets.ghcr_token.as_deref();
+    let token = fleet.secrets.gh_token.as_deref();
     let (pool, releases) = tokio::join!(
         SshPool::connect(&filtered),
         crate::ghcr::fetch_releases(token, &fleet.apps)

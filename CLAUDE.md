@@ -150,7 +150,7 @@ cargo test
 
 ## Secrets
 
-`fleet.env.toml` (gitignored) holds all env vars — both secrets and non-secret config. `fleet.toml` contains no env vars. Fleet-level secrets: `ghcr_token` (Docker image pulls), `cloudflare_api_token` (DNS management). App-level secrets like `DB_PASSWORD` go under `[apps.<name>]`.
+`fleet.env.toml` (gitignored) holds all env vars — both secrets and non-secret config. `fleet.toml` contains no env vars. Fleet-level secrets: `gh_token` (Docker image pulls), `cloudflare_api_token` (DNS management). App-level secrets like `DB_PASSWORD` go under `[apps.<name>]`.
 
 ### Comments: ABSOLUTE RULE
 

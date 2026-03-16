@@ -224,7 +224,7 @@ async fn resolve_command(name: &str) -> Option<String> {
     }
 }
 
-fn generate_wud_compose(ghcr_username: &str, ghcr_token: &str) -> String {
+fn generate_wud_compose(gh_username: &str, gh_token: &str) -> String {
     format!(
         r#"services:
   wud:
@@ -239,8 +239,8 @@ fn generate_wud_compose(ghcr_username: &str, ghcr_token: &str) -> String {
       WUD_WATCHER_LOCAL_CRON: "*/5 * * * * *"
       WUD_WATCHER_LOCAL_WATCHBYDEFAULT: "false"
       WUD_WATCHER_LOCAL_JITTER: "0"
-      WUD_REGISTRY_GHCR_FLOW_USERNAME: {ghcr_username}
-      WUD_REGISTRY_GHCR_FLOW_TOKEN: {ghcr_token}
+      WUD_REGISTRY_GHCR_FLOW_USERNAME: {gh_username}
+      WUD_REGISTRY_GHCR_FLOW_TOKEN: {gh_token}
       WUD_TRIGGER_COMMAND_ROLLOUT_CMD: /rollout.sh
       WUD_TRIGGER_COMMAND_ROLLOUT_SHELL: /bin/sh
       WUD_TRIGGER_COMMAND_ROLLOUT_TIMEOUT: "120000"
@@ -254,8 +254,8 @@ pub async fn deploy_infra(
     pool: &SshPool,
     server_name: &str,
     network: &str,
-    ghcr_username: Option<&str>,
-    ghcr_token: Option<&str>,
+    gh_username: Option<&str>,
+    gh_token: Option<&str>,
 ) -> Result<()> {
     let sp = ui::spinner("Setting up infrastructure containers...");
 
@@ -278,7 +278,7 @@ pub async fn deploy_infra(
     pool.exec(server_name, "cd /opt/flow/caddy && docker compose up -d")
         .await?;
 
-    if let (Some(username), Some(token)) = (ghcr_username, ghcr_token) {
+    if let (Some(username), Some(token)) = (gh_username, gh_token) {
         let wud_compose = generate_wud_compose(username, token);
         pool.upload_file(
             server_name,
@@ -298,7 +298,7 @@ pub async fn deploy_infra(
         sp.finish_and_clear();
         ui::success("Caddy started");
         ui::error(
-            "WUD skipped: set ghcr_username and ghcr_token in fleet.env.toml (or use `flow login gh`)",
+            "WUD skipped: set gh_username and gh_token in fleet.env.toml (or use `flow login gh`)",
         );
     }
 
@@ -353,14 +353,14 @@ async fn add(
     let ansible_playbook = ensure_ansible(project_dir).await?;
 
     let env_path = config_path.with_file_name("fleet.env.toml");
-    let (ghcr_token, ghcr_username, cf_token) = if env_path.exists() {
+    let (gh_token, gh_username, cf_token) = if env_path.exists() {
         let env_content = std::fs::read_to_string(&env_path)
             .with_context(|| format!("Failed to read {}", env_path.display()))?;
         let env_config: EnvConfig = toml::from_str(&env_content)
             .with_context(|| format!("Failed to parse {}", env_path.display()))?;
         (
-            env_config.fleet.ghcr_token.filter(|t| !t.is_empty()),
-            env_config.fleet.ghcr_username.filter(|t| !t.is_empty()),
+            env_config.fleet.gh_token.filter(|t| !t.is_empty()),
+            env_config.fleet.gh_username.filter(|t| !t.is_empty()),
             env_config
                 .fleet
                 .cloudflare_api_token
@@ -401,7 +401,7 @@ async fn add(
         .env("ANSIBLE_HOST_KEY_CHECKING", "False")
         .current_dir(project_dir);
 
-    if let Some(ref token) = ghcr_token {
+    if let Some(ref token) = gh_token {
         cmd.arg("-e").arg(format!("ghcr_token={token}"));
     }
 
@@ -426,8 +426,8 @@ async fn add(
         &pool,
         name,
         &config.network,
-        ghcr_username.as_deref(),
-        ghcr_token.as_deref(),
+        gh_username.as_deref(),
+        gh_token.as_deref(),
     )
     .await?;
     pool.close().await?;
@@ -491,12 +491,12 @@ pub async fn run_hardening(config_path: &str, server_filter: Option<&str>) -> Re
     let resolved_key = resolve_ssh_key(None, fleet.domain.as_deref().and(None))?;
 
     let env_path = config_path.with_file_name("fleet.env.toml");
-    let ghcr_token = if env_path.exists() {
+    let gh_token = if env_path.exists() {
         let env_content = std::fs::read_to_string(&env_path)
             .with_context(|| format!("Failed to read {}", env_path.display()))?;
         let env_config: EnvConfig = toml::from_str(&env_content)
             .with_context(|| format!("Failed to parse {}", env_path.display()))?;
-        env_config.fleet.ghcr_token.filter(|t| !t.is_empty())
+        env_config.fleet.gh_token.filter(|t| !t.is_empty())
     } else {
         None
     };
@@ -533,7 +533,7 @@ pub async fn run_hardening(config_path: &str, server_filter: Option<&str>) -> Re
             .arg(format!("ssh_pub_key_path={resolved_key}"))
             .current_dir(project_dir);
 
-        if let Some(ref token) = ghcr_token {
+        if let Some(ref token) = gh_token {
             cmd.arg("-e").arg(format!("ghcr_token={token}"));
         }
 

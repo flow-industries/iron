@@ -34,8 +34,8 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
             &pool,
             server_name,
             &fleet.network,
-            fleet.secrets.ghcr_username.as_deref(),
-            fleet.secrets.ghcr_token.as_deref(),
+            fleet.secrets.gh_username.as_deref(),
+            fleet.secrets.gh_token.as_deref(),
         )
         .await
         {

@@ -41,7 +41,7 @@ pub async fn run(config_path: &str) -> Result<()> {
 
     if let Some(username) = ui::prompt("GitHub org/username for GHCR (e.g. flow-industries):") {
         let env_path = Path::new(config_path).with_file_name("fleet.env.toml");
-        if let Err(e) = crate::login::save_fleet_secret(&env_path, "ghcr_username", &username) {
+        if let Err(e) = crate::login::save_fleet_secret(&env_path, "gh_username", &username) {
             ui::error(&format!("Failed to save username: {e}"));
         }
     }
@@ -54,7 +54,7 @@ pub async fn run(config_path: &str) -> Result<()> {
             &token,
             verify_gh(&token),
             &env_path,
-            "ghcr_token",
+            "gh_token",
             "flow login gh",
         )
         .await;
