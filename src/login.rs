@@ -9,7 +9,7 @@ use crate::ui;
 const CF_TOKEN_URL: &str =
     "https://dash.cloudflare.com/profile/api-tokens → Create Token → Edit zone DNS";
 const GH_TOKEN_URL: &str =
-    "https://github.com/settings/tokens/new?scopes=read:packages&description=flow-iron";
+    "https://github.com/settings/tokens/new?scopes=read:packages,admin:org&description=flow-iron";
 
 pub async fn run(config_path: &str, command: Option<&LoginCommand>) -> Result<()> {
     let env_path = Path::new(config_path).with_file_name("fleet.env.toml");
@@ -45,8 +45,8 @@ async fn cloudflare_login(env_path: &Path) -> Result<()> {
 }
 
 async fn github_login(env_path: &Path) -> Result<()> {
-    ui::header("GitHub Container Registry");
-    println!("  Create a Personal Access Token (classic) with read:packages scope:");
+    ui::header("GitHub");
+    println!("  Create a Personal Access Token (classic) with read:packages + admin:org scopes:");
     println!("  {GH_TOKEN_URL}");
     println!();
 

@@ -116,10 +116,22 @@ pub enum Command {
         command: AppCommand,
     },
 
+    /// Manage GitHub Actions self-hosted runners
+    Runner {
+        #[command(subcommand)]
+        command: RunnerCommand,
+    },
+
     /// Login to external services (runs all if no subcommand given)
     Login {
         #[command(subcommand)]
         command: Option<LoginCommand>,
+    },
+
+    /// Manage app databases
+    Db {
+        #[command(subcommand)]
+        command: DbCommand,
     },
 
     /// Manage environment variables in fleet.env.toml
@@ -174,6 +186,102 @@ pub enum ServerCommand {
         /// Server name to remove
         name: String,
     },
+}
+
+#[derive(Subcommand)]
+pub enum DbCommand {
+    /// Open an interactive psql shell
+    Shell {
+        /// App name (defaults to first app with postgres)
+        app: Option<String>,
+
+        /// Server to connect to (defaults to first server)
+        #[arg(long)]
+        server: Option<String>,
+    },
+
+    /// Dump the database to a local file
+    Dump {
+        /// App name (defaults to first app with postgres)
+        app: Option<String>,
+
+        /// Output file path (default: {app}.sql.gz)
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// Server to dump from (defaults to first server)
+        #[arg(long)]
+        server: Option<String>,
+    },
+
+    /// Restore the database from a local SQL file
+    Restore {
+        /// App name (defaults to first app with postgres)
+        app: Option<String>,
+
+        /// Path to .sql or .sql.gz file
+        file: String,
+
+        /// Skip confirmation prompt
+        #[arg(long)]
+        yes: bool,
+
+        /// Server to restore to (defaults to first server)
+        #[arg(long)]
+        server: Option<String>,
+    },
+
+    /// List available backups on the server
+    List {
+        /// App name (defaults to first app with postgres)
+        app: Option<String>,
+
+        /// Server to list backups from (defaults to first server)
+        #[arg(long)]
+        server: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum RunnerCommand {
+    /// Add a self-hosted runner (interactive wizard if no args given)
+    Add {
+        /// Runner name (used as identifier in fleet.toml)
+        name: Option<String>,
+
+        /// Server to deploy to (must exist in fleet.toml)
+        #[arg(long)]
+        server: Option<String>,
+
+        /// Runner scope: org or repo
+        #[arg(long)]
+        scope: Option<String>,
+
+        /// Target org name or owner/repo
+        #[arg(long)]
+        target: Option<String>,
+
+        /// Runner label(s) (repeatable)
+        #[arg(long)]
+        label: Vec<String>,
+
+        /// Single-job ephemeral mode (default: true)
+        #[arg(long)]
+        ephemeral: bool,
+    },
+
+    /// Remove a runner from fleet.toml and clean up on server
+    Remove {
+        /// Runner name to remove
+        name: String,
+
+        /// Skip confirmation prompt
+        #[arg(long)]
+        yes: bool,
+    },
+
+    /// List runners and their status from GitHub API
+    List,
 }
 
 #[derive(Subcommand)]

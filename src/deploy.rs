@@ -3,23 +3,32 @@ use anyhow::{Result, bail};
 use crate::caddy;
 use crate::cloudflare;
 use crate::compose;
-use crate::config::{DeployStrategy, Fleet, ResolvedApp};
+use crate::config::{DeployStrategy, Fleet, ResolvedApp, Runner};
+use crate::runner;
 use crate::ssh::SshPool;
 use crate::ui;
 
 pub async fn run(fleet: &Fleet, app_filter: Option<&str>, force: bool) -> Result<()> {
-    let apps: Vec<&ResolvedApp> = if let Some(name) = app_filter {
-        let app = fleet
-            .apps
-            .get(name)
-            .ok_or_else(|| anyhow::anyhow!("Unknown app: {name}"))?;
-        vec![app]
+    let (apps, runners): (Vec<&ResolvedApp>, Vec<(&str, &Runner)>) = if let Some(name) = app_filter
+    {
+        if let Some(app) = fleet.apps.get(name) {
+            (vec![app], vec![])
+        } else if let Some(runner) = fleet.runners.get(name) {
+            (vec![], vec![(name, runner)])
+        } else {
+            bail!("Unknown app or runner: {name}");
+        }
     } else {
-        fleet.apps.values().collect()
+        let apps = fleet.apps.values().collect();
+        let runners = fleet.runners.iter().map(|(k, v)| (k.as_str(), v)).collect();
+        (apps, runners)
     };
 
-    let needed_servers: std::collections::HashSet<_> =
+    let mut needed_servers: std::collections::HashSet<_> =
         apps.iter().flat_map(|a| a.servers.iter()).collect();
+    for (_, r) in &runners {
+        needed_servers.insert(&r.server);
+    }
 
     let servers_to_connect: std::collections::HashMap<_, _> = fleet
         .servers
@@ -59,6 +68,10 @@ pub async fn run(fleet: &Fleet, app_filter: Option<&str>, force: bool) -> Result
 
     for app in &apps {
         deploy_app(fleet, app, &pool, force).await?;
+    }
+
+    for (name, r) in &runners {
+        deploy_runner(fleet, name, r, &pool).await?;
     }
 
     pool.close().await?;
@@ -183,5 +196,54 @@ async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool, force: boo
         }
     }
 
+    Ok(())
+}
+
+async fn deploy_runner(fleet: &Fleet, name: &str, r: &Runner, pool: &SshPool) -> Result<()> {
+    let gh_token = fleet
+        .secrets
+        .gh_token
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("gh_token not set — run `flow login gh`"))?;
+
+    println!();
+    ui::header(&format!("Deploying runner-{name}"));
+
+    let compose_yaml = runner::generate_compose(name, r);
+    let env_content = runner::generate_env(gh_token);
+    let runner_dir = format!("/opt/flow/runner-{name}");
+
+    let sp = ui::spinner(&format!("  {} → uploading files...", r.server));
+    pool.exec(&r.server, &format!("mkdir -p {runner_dir}"))
+        .await?;
+    pool.upload_file(
+        &r.server,
+        &format!("{runner_dir}/docker-compose.yml"),
+        &compose_yaml,
+    )
+    .await?;
+    pool.upload_file(&r.server, &format!("{runner_dir}/.env"), &env_content)
+        .await?;
+    pool.exec(&r.server, &format!("chmod 600 {runner_dir}/.env"))
+        .await?;
+    sp.finish_and_clear();
+
+    let sp = ui::spinner(&format!("  {} → pulling images...", r.server));
+    pool.exec(
+        &r.server,
+        &format!("cd {runner_dir} && docker compose pull"),
+    )
+    .await?;
+    sp.finish_and_clear();
+
+    let sp = ui::spinner(&format!("  {} → deploying...", r.server));
+    pool.exec(
+        &r.server,
+        &format!("cd {runner_dir} && docker compose up -d"),
+    )
+    .await?;
+    sp.finish_and_clear();
+
+    ui::success(&format!("  {} → runner-{}", r.server, name));
     Ok(())
 }

@@ -50,9 +50,14 @@ async fn main() -> Result<()> {
             iron::restart::run(&fleet, &app, server.as_deref()).await
         }
         Command::Remove { app, yes } => iron::remove::run(&cli.config, &app, yes).await,
+        Command::Runner { command } => iron::runner::run(&cli.config, command).await,
         Command::Init => iron::init::run(&cli.config).await,
         Command::Server { command } => iron::server::run(&cli.config, command).await,
         Command::App { command } => iron::app::run(&cli.config, command),
+        Command::Db { command } => {
+            let fleet = iron::config::load(&cli.config)?;
+            iron::db::run(&fleet, command).await
+        }
         Command::Env { args } => iron::env::run(&cli.config, &args),
         Command::Login { command } => iron::login::run(&cli.config, command.as_ref()).await,
         Command::Update => iron::update::run().await,

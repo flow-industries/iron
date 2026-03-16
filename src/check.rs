@@ -169,7 +169,12 @@ async fn check_stale(
     apps: &[&ResolvedApp],
     fleet: &Fleet,
 ) -> Result<()> {
-    let expected: HashSet<&str> = apps.iter().map(|a| a.name.as_str()).collect();
+    let mut expected: HashSet<String> = apps.iter().map(|a| a.name.clone()).collect();
+    for (name, runner) in &fleet.runners {
+        if runner.server == server {
+            expected.insert(format!("runner-{name}"));
+        }
+    }
 
     let output = pool
         .exec(server, "ls -1 /opt/flow/ 2>/dev/null")
@@ -183,11 +188,11 @@ async fn check_stale(
 
     let mut found_stale = false;
     for dir in &on_disk {
-        if expected.contains(dir) {
+        if expected.contains(*dir) {
             continue;
         }
         found_stale = true;
-        if fleet.apps.contains_key(*dir) {
+        if fleet.apps.contains_key(*dir) || fleet.runners.contains_key(*dir) {
             ui::error(&format!(
                 "stale: /opt/flow/{dir} (assigned to different server)"
             ));

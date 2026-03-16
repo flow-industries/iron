@@ -14,6 +14,8 @@ pub struct FleetConfig {
     pub servers: HashMap<String, Server>,
     #[serde(default)]
     pub apps: HashMap<String, App>,
+    #[serde(default)]
+    pub runners: HashMap<String, Runner>,
 }
 
 fn default_network() -> String {
@@ -92,6 +94,29 @@ fn default_protocol() -> String {
     "tcp".to_string()
 }
 
+#[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct Runner {
+    pub server: String,
+    pub scope: RunnerScope,
+    pub target: String,
+    #[serde(default)]
+    pub labels: Vec<String>,
+    #[serde(default = "default_ephemeral")]
+    pub ephemeral: bool,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum RunnerScope {
+    Org,
+    Repo,
+}
+
+fn default_ephemeral() -> bool {
+    true
+}
+
 #[derive(Debug, Deserialize, Default)]
 pub struct EnvConfig {
     #[serde(default)]
@@ -121,6 +146,7 @@ pub struct Fleet {
     pub network: String,
     pub servers: HashMap<String, Server>,
     pub apps: HashMap<String, ResolvedApp>,
+    pub runners: HashMap<String, Runner>,
     pub secrets: FleetSecrets,
 }
 
@@ -273,6 +299,18 @@ fn validate(config: &FleetConfig) -> Result<()> {
         seen_domains.insert(domain, app_name);
     }
 
+    for (runner_name, runner) in &config.runners {
+        if runner.target.is_empty() {
+            bail!("Runner '{runner_name}' has an empty target");
+        }
+        if !config.servers.contains_key(&runner.server) {
+            bail!(
+                "Runner '{runner_name}' references unknown server '{}'",
+                runner.server
+            );
+        }
+    }
+
     Ok(())
 }
 
@@ -359,6 +397,7 @@ pub fn load(config_path: &str) -> Result<Fleet> {
         network: config.network,
         servers: config.servers,
         apps: resolved_apps,
+        runners: config.runners,
         secrets: env_config.fleet,
     })
 }

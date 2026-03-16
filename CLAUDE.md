@@ -68,10 +68,17 @@ flow server remove fl-1
 flow server check
 flow server check fl-1
 
+# Runner management (modifies fleet.toml only, run flow deploy afterward)
+flow runner add ci --server fl-1 --scope org --target flow-industries --label linux
+flow runner add                    # interactive wizard
+flow runner remove ci
+flow runner remove ci --yes
+flow runner list                   # queries GitHub API for live status
+
 # Login (set API tokens in fleet.env.toml)
 flow login         # Cloudflare + GitHub sequentially
 flow login cf      # Cloudflare API token only
-flow login gh      # GitHub (GHCR) token only
+flow login gh      # GitHub token (GHCR + runner management)
 
 # Install Ansible dependencies (once)
 ansible-galaxy install -r ansible/requirements.yml
@@ -79,7 +86,7 @@ ansible-galaxy install -r ansible/requirements.yml
 
 ## Architecture
 
-**`fleet.toml` is the single source of truth for infrastructure** — servers, apps, routing, sidecars, and port mappings. **`fleet.env.toml` (gitignored) is the single source of truth for all env vars** — both secrets and non-secret config like `NODE_ENV` or `POSTGRES_USER`. On deploy, env vars from `fleet.env.toml` are written to `.env` files.
+**`fleet.toml` is the single source of truth for infrastructure** — servers, apps, runners, routing, sidecars, and port mappings. **`fleet.env.toml` (gitignored) is the single source of truth for all env vars** — both secrets and non-secret config like `NODE_ENV` or `POSTGRES_USER`. On deploy, env vars from `fleet.env.toml` are written to `.env` files.
 
 **`flow deploy <app>` pipeline:**
 1. Parse `fleet.toml` + `fleet.env.toml`, merge env vars
@@ -116,6 +123,7 @@ src/
   login.rs      — login cf/gh, save tokens to fleet.env.toml
   app.rs        — app add, add-service, remove-service (toml_edit)
   server.rs     — server add/remove/check (Ansible + toml_edit)
+  runner.rs     — runner add/remove/list, compose gen, GitHub API
   status.rs     — fleet-wide status, container info, table display
   logs.rs       — tail logs from app
   ui.rs         — spinner, success/error/header, confirm prompt
@@ -128,6 +136,7 @@ tests/
   login.rs      — login token saving
   app.rs        — app management
   server.rs     — server management
+  runner.rs     — runner config, compose gen, toml_edit
 ```
 
 ## Pre-push Checklist
@@ -150,7 +159,7 @@ cargo test
 
 ## Secrets
 
-`fleet.env.toml` (gitignored) holds all env vars — both secrets and non-secret config. `fleet.toml` contains no env vars. Fleet-level secrets: `gh_token` (Docker image pulls), `cloudflare_api_token` (DNS management). App-level secrets like `DB_PASSWORD` go under `[apps.<name>]`.
+`fleet.env.toml` (gitignored) holds all env vars — both secrets and non-secret config. `fleet.toml` contains no env vars. Fleet-level secrets: `gh_token` (GHCR image pulls + runner management), `gh_username` (GHCR org/username), `cloudflare_api_token` (DNS management). App-level secrets like `DB_PASSWORD` go under `[apps.<name>]`.
 
 ### Comments: ABSOLUTE RULE
 

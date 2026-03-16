@@ -75,7 +75,7 @@
       community.docker.docker_login:
         registry: ghcr.io
         username: flow-industries
-        password: "{{ ghcr_token }}"
+        password: "{{ gh_token }}"
 
     - name: Create Caddy sites directory
       ansible.builtin.file:
