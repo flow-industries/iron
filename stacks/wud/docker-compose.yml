@@ -8,9 +8,9 @@ services:
       - /opt/flow:/opt/flow:ro
       - ./rollout.sh:/rollout.sh:ro
     environment:
-      # Watcher: poll every 5 minutes, only watch labeled containers
-      WUD_WATCHER_LOCAL_CRON: "*/5 * * * *"
+      WUD_WATCHER_LOCAL_CRON: "*/5 * * * * *"
       WUD_WATCHER_LOCAL_WATCHBYDEFAULT: "false"
+      WUD_WATCHER_LOCAL_JITTER: "0"
 
       # Registry: GHCR authentication
       WUD_REGISTRY_GHCR_FLOW_URL: https://ghcr.io
