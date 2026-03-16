@@ -239,7 +239,6 @@ fn generate_wud_compose(ghcr_username: &str, ghcr_token: &str) -> String {
       WUD_WATCHER_LOCAL_CRON: "*/5 * * * * *"
       WUD_WATCHER_LOCAL_WATCHBYDEFAULT: "false"
       WUD_WATCHER_LOCAL_JITTER: "0"
-      WUD_REGISTRY_GHCR_FLOW_URL: https://ghcr.io
       WUD_REGISTRY_GHCR_FLOW_USERNAME: {ghcr_username}
       WUD_REGISTRY_GHCR_FLOW_TOKEN: {ghcr_token}
       WUD_TRIGGER_COMMAND_ROLLOUT_CMD: /rollout.sh
