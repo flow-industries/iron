@@ -30,14 +30,8 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
         };
         ui::header(&display);
 
-        if let Err(e) = crate::server::deploy_infra(
-            &pool,
-            server_name,
-            &fleet.network,
-            fleet.secrets.gh_username.as_deref(),
-            fleet.secrets.gh_token.as_deref(),
-        )
-        .await
+        if let Err(e) =
+            crate::server::deploy_infra(&pool, server_name, &fleet.network, &fleet.secrets).await
         {
             ui::error(&format!("Infra error: {e}"));
         }

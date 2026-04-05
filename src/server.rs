@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail};
 use std::path::Path;
 
 use crate::cli::ServerCommand;
-use crate::config::{EnvConfig, FleetConfig, Server};
+use crate::config::{EnvConfig, FleetConfig, FleetSecrets, Server};
 use crate::ssh::SshPool;
 use crate::ui;
 
@@ -224,7 +224,25 @@ async fn resolve_command(name: &str) -> Option<String> {
     }
 }
 
-fn generate_wud_compose(gh_username: &str, gh_token: &str) -> String {
+fn generate_wud_compose(secrets: &FleetSecrets) -> String {
+    let gh_username = secrets.gh_username.as_deref().unwrap_or("");
+    let gh_token = secrets.gh_token.as_deref().unwrap_or("");
+
+    let mut notify_env = String::new();
+    if let (Some(bot_token), Some(chat_id)) =
+        (&secrets.telegram_bot_token, &secrets.telegram_chat_id)
+    {
+        notify_env.push_str(&format!(
+            "      NOTIFY_TELEGRAM_BOT_TOKEN: {bot_token}\n\
+             \x20     NOTIFY_TELEGRAM_CHAT_ID: {chat_id}\n"
+        ));
+    }
+    if let Some(webhook_url) = &secrets.discord_webhook_url {
+        notify_env.push_str(&format!(
+            "      NOTIFY_DISCORD_WEBHOOK_URL: {webhook_url}\n"
+        ));
+    }
+
     format!(
         r#"services:
   wud:
@@ -246,7 +264,7 @@ fn generate_wud_compose(gh_username: &str, gh_token: &str) -> String {
       WUD_TRIGGER_COMMAND_ROLLOUT_SHELL: /bin/sh
       WUD_TRIGGER_COMMAND_ROLLOUT_TIMEOUT: "120000"
       WUD_TRIGGER_DOCKER_GAMEUPDATE_PRUNE: "true"
-    restart: always
+{notify_env}    restart: always
 "#
     )
 }
@@ -255,8 +273,7 @@ pub async fn deploy_infra(
     pool: &SshPool,
     server_name: &str,
     network: &str,
-    gh_username: Option<&str>,
-    gh_token: Option<&str>,
+    secrets: &FleetSecrets,
 ) -> Result<()> {
     let sp = ui::spinner("Setting up infrastructure containers...");
 
@@ -279,8 +296,8 @@ pub async fn deploy_infra(
     pool.exec(server_name, "cd /opt/flow/caddy && docker compose up -d")
         .await?;
 
-    if let (Some(username), Some(token)) = (gh_username, gh_token) {
-        let wud_compose = generate_wud_compose(username, token);
+    if secrets.gh_username.is_some() && secrets.gh_token.is_some() {
+        let wud_compose = generate_wud_compose(secrets);
         pool.upload_file(
             server_name,
             "/opt/flow/wud/docker-compose.yml",
@@ -354,32 +371,29 @@ async fn add(
     let ansible_playbook = ensure_ansible(project_dir).await?;
 
     let env_path = config_path.with_file_name("fleet.env.toml");
-    let (gh_token, gh_username, cf_token) = if env_path.exists() {
+    let fleet_secrets = if env_path.exists() {
         let env_content = std::fs::read_to_string(&env_path)
             .with_context(|| format!("Failed to read {}", env_path.display()))?;
         let env_config: EnvConfig = toml::from_str(&env_content)
             .with_context(|| format!("Failed to parse {}", env_path.display()))?;
-        (
-            env_config.fleet.gh_token.filter(|t| !t.is_empty()),
-            env_config.fleet.gh_username.filter(|t| !t.is_empty()),
-            env_config
-                .fleet
-                .cloudflare_api_token
-                .filter(|t| !t.is_empty()),
-        )
+        env_config.fleet
     } else {
-        (None, None, None)
+        FleetSecrets::default()
     };
 
-    let cf_token = cf_token.ok_or_else(|| {
-        anyhow::anyhow!(
-            "Cannot create DNS record: cloudflare_api_token not set in fleet.env.toml\n  \
-             Run `flow login cf` to set it"
-        )
-    })?;
+    let cf_token = fleet_secrets
+        .cloudflare_api_token
+        .as_deref()
+        .filter(|t| !t.is_empty())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Cannot create DNS record: cloudflare_api_token not set in fleet.env.toml\n  \
+                 Run `flow login cf` to set it"
+            )
+        })?;
 
     let sp = ui::spinner(&format!("Creating DNS record {hostname} → {ip}..."));
-    crate::cloudflare::ensure_dns_record(&cf_token, &hostname, ip).await?;
+    crate::cloudflare::ensure_dns_record(cf_token, &hostname, ip).await?;
     sp.finish_and_clear();
     ui::success(&format!("{hostname} → {ip}"));
 
@@ -402,7 +416,7 @@ async fn add(
         .env("ANSIBLE_HOST_KEY_CHECKING", "False")
         .current_dir(project_dir);
 
-    if let Some(ref token) = gh_token {
+    if let Some(ref token) = fleet_secrets.gh_token {
         cmd.arg("-e").arg(format!("gh_token={token}"));
     }
 
@@ -423,14 +437,7 @@ async fn add(
         ssh_key: cli_ssh_key.map(String::from),
     };
     let pool = SshPool::connect_one(name, &server_entry).await?;
-    deploy_infra(
-        &pool,
-        name,
-        &config.network,
-        gh_username.as_deref(),
-        gh_token.as_deref(),
-    )
-    .await?;
+    deploy_infra(&pool, name, &config.network, &fleet_secrets).await?;
     pool.close().await?;
 
     write_server_to_config(config_path, name, &hostname, ip, user, cli_ssh_key)?;
@@ -589,6 +596,71 @@ pub fn write_server_to_config(
     std::fs::write(config_path, doc.to_string())
         .with_context(|| format!("Failed to write {}", config_path.display()))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wud_compose_includes_telegram_when_configured() {
+        let secrets = FleetSecrets {
+            gh_username: Some("org".into()),
+            gh_token: Some("tok".into()),
+            telegram_bot_token: Some("123:ABC".into()),
+            telegram_chat_id: Some("-100999".into()),
+            ..Default::default()
+        };
+        let output = generate_wud_compose(&secrets);
+        assert!(output.contains("NOTIFY_TELEGRAM_BOT_TOKEN: 123:ABC"));
+        assert!(output.contains("NOTIFY_TELEGRAM_CHAT_ID: -100999"));
+        assert!(!output.contains("NOTIFY_DISCORD_WEBHOOK_URL"));
+    }
+
+    #[test]
+    fn wud_compose_includes_discord_when_configured() {
+        let secrets = FleetSecrets {
+            gh_username: Some("org".into()),
+            gh_token: Some("tok".into()),
+            discord_webhook_url: Some("https://discord.com/api/webhooks/123/abc".into()),
+            ..Default::default()
+        };
+        let output = generate_wud_compose(&secrets);
+        assert!(
+            output.contains("NOTIFY_DISCORD_WEBHOOK_URL: https://discord.com/api/webhooks/123/abc")
+        );
+        assert!(!output.contains("NOTIFY_TELEGRAM"));
+    }
+
+    #[test]
+    fn wud_compose_omits_notifications_when_not_configured() {
+        let secrets = FleetSecrets {
+            gh_username: Some("org".into()),
+            gh_token: Some("tok".into()),
+            ..Default::default()
+        };
+        let output = generate_wud_compose(&secrets);
+        assert!(!output.contains("NOTIFY_"));
+        assert!(output.contains("WUD_REGISTRY_GHCR_FLOW_USERNAME: org"));
+    }
+
+    #[test]
+    fn wud_compose_includes_both_when_configured() {
+        let secrets = FleetSecrets {
+            gh_username: Some("org".into()),
+            gh_token: Some("tok".into()),
+            telegram_bot_token: Some("123:ABC".into()),
+            telegram_chat_id: Some("-100999".into()),
+            discord_webhook_url: Some("https://discord.com/api/webhooks/123/abc".into()),
+            ..Default::default()
+        };
+        let output = generate_wud_compose(&secrets);
+        assert!(output.contains("NOTIFY_TELEGRAM_BOT_TOKEN: 123:ABC"));
+        assert!(output.contains("NOTIFY_TELEGRAM_CHAT_ID: -100999"));
+        assert!(
+            output.contains("NOTIFY_DISCORD_WEBHOOK_URL: https://discord.com/api/webhooks/123/abc")
+        );
+    }
 }
 
 pub fn remove_server_from_config(config_path: &Path, name: &str) -> Result<()> {
