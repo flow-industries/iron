@@ -223,7 +223,14 @@ async fn resolve_command(name: &str) -> Option<String> {
     }
 }
 
-fn generate_watcher_compose(gh_username: &str, gh_token: &str) -> String {
+fn generate_watcher_compose(
+    gh_username: &str,
+    gh_token: &str,
+    discord_webhook_url: Option<&str>,
+) -> String {
+    let webhook_env = discord_webhook_url
+        .map(|url| format!("      DISCORD_WEBHOOK_URL: {url}\n"))
+        .unwrap_or_default();
     format!(
         r#"services:
   watcher:
@@ -239,7 +246,7 @@ fn generate_watcher_compose(gh_username: &str, gh_token: &str) -> String {
     environment:
       GHCR_USERNAME: {gh_username}
       GHCR_TOKEN: {gh_token}
-    restart: always
+{webhook_env}    restart: always
     healthcheck:
       test: ["CMD-SHELL", "test $(($(date +%s) - $(cat /tmp/watcher-heartbeat 2>/dev/null || echo 0))) -lt 120"]
       interval: 30s
@@ -258,6 +265,18 @@ INTERVAL="${CHECK_INTERVAL:-30}"
 FMT="+%Y-%m-%dT%H:%M:%SZ"
 
 log() { echo "$(date -u "$FMT") $*"; }
+
+notify() {
+  if [ -n "${DISCORD_WEBHOOK_URL:-}" ]; then
+    curl -s -X POST "$DISCORD_WEBHOOK_URL" \
+      -H "Content-Type: application/json" \
+      -d "{\"content\": \"$1\"}" > /dev/null 2>&1 || true
+  fi
+}
+
+if [ -n "${DISCORD_WEBHOOK_URL:-}" ] && ! command -v curl > /dev/null 2>&1; then
+  apt-get update -qq > /dev/null 2>&1 && apt-get install -y -qq curl > /dev/null 2>&1
+fi
 
 while true; do
   if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
@@ -279,6 +298,7 @@ while true; do
 
     if ! docker pull "$image" -q > /dev/null 2>&1; then
       log "ERROR: pull failed for ${image}"
+      notify "[${project}] pull failed"
       continue
     fi
 
@@ -286,19 +306,27 @@ while true; do
 
     [ "$local_id" = "$new_id" ] && continue
 
-    log "UPDATE: ${project} (${local_id##sha256:} -> ${new_id##sha256:})"
+    short_old=$(echo "$local_id" | cut -c8-19)
+    short_new=$(echo "$new_id" | cut -c8-19)
+    log "UPDATE: ${project} (${short_old} -> ${short_new})"
 
     if [ "$strategy" = "recreate" ]; then
+      notify "[${project}] update detected, recreating (${short_old} -> ${short_new})"
       if docker compose -f "$compose" up -d --force-recreate 2>&1; then
         log "RECREATE: ${project} done"
+        notify "[${project}] recreate complete"
       else
         log "ERROR: recreate failed for ${project}"
+        notify "[${project}] recreate failed"
       fi
     else
+      notify "[${project}] update detected, rolling out (${short_old} -> ${short_new})"
       if docker rollout "$project" -f "$compose" 2>&1; then
         log "ROLLOUT: ${project} done"
+        notify "[${project}] rollout complete"
       else
         log "ERROR: rollout failed for ${project}"
+        notify "[${project}] rollout failed"
       fi
     fi
   done
@@ -315,6 +343,7 @@ pub async fn deploy_infra(
     network: &str,
     gh_username: Option<&str>,
     gh_token: Option<&str>,
+    discord_webhook_url: Option<&str>,
     has_ghcr_apps: bool,
 ) -> Result<()> {
     let sp = ui::spinner("Setting up infrastructure containers...");
@@ -341,7 +370,7 @@ pub async fn deploy_infra(
     if has_ghcr_apps {
         if let (Some(username), Some(token)) = (gh_username, gh_token) {
             pool.exec(server_name, "mkdir -p /opt/flow/watcher").await?;
-            let watcher_compose = generate_watcher_compose(username, token);
+            let watcher_compose = generate_watcher_compose(username, token, discord_webhook_url);
             pool.upload_file(
                 server_name,
                 "/opt/flow/watcher/docker-compose.yml",
@@ -495,6 +524,7 @@ async fn add(
         &config.network,
         gh_username.as_deref(),
         gh_token.as_deref(),
+        None,
         false,
     )
     .await?;

@@ -356,6 +356,42 @@ SECRET_KEY = "abc123"
 }
 
 #[test]
+fn discord_webhook_parsed_from_env_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let fleet_path = dir.path().join("fleet.toml");
+    let env_path = dir.path().join("fleet.env.toml");
+
+    std::fs::write(
+        &fleet_path,
+        r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 3000
+"#,
+    )
+    .unwrap();
+
+    std::fs::write(
+        &env_path,
+        r#"
+[fleet]
+discord_webhook_url = "https://discord.com/api/webhooks/123/abc"
+"#,
+    )
+    .unwrap();
+
+    let fleet = load(fleet_path.to_str().unwrap()).unwrap();
+    assert_eq!(
+        fleet.secrets.discord_webhook_url.as_deref(),
+        Some("https://discord.com/api/webhooks/123/abc")
+    );
+}
+
+#[test]
 fn validate_server_invalid_ip() {
     let toml_str = r#"
 [servers.flow-1]

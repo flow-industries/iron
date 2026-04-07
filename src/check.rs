@@ -38,6 +38,7 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
             &fleet.network,
             fleet.secrets.gh_username.as_deref(),
             fleet.secrets.gh_token.as_deref(),
+            fleet.secrets.discord_webhook_url.as_deref(),
             has_ghcr_apps,
         )
         .await

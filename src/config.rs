@@ -138,6 +138,7 @@ pub struct FleetSecrets {
     pub gh_token: Option<String>,
     pub gh_username: Option<String>,
     pub cloudflare_api_token: Option<String>,
+    pub discord_webhook_url: Option<String>,
 }
 
 #[derive(Debug)]
