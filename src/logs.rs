@@ -8,8 +8,21 @@ use crate::ui;
 pub async fn run(fleet: &Fleet, app_name: &str, follow: bool, server: Option<&str>) -> Result<()> {
     let is_infra = app_name == "watcher" || app_name == "caddy";
 
-    let server_name = if is_infra {
-        if let Some(s) = server {
+    let (server_name, dir_name) = if let Some(runner) = fleet.runners.get(app_name) {
+        let s = if let Some(s) = server {
+            if s != runner.server {
+                bail!(
+                    "Runner '{app_name}' is on server '{}', not '{s}'",
+                    runner.server
+                );
+            }
+            s.to_string()
+        } else {
+            runner.server.clone()
+        };
+        (s, format!("runner-{app_name}"))
+    } else if is_infra {
+        let s = if let Some(s) = server {
             s.to_string()
         } else {
             let name = fleet
@@ -21,18 +34,19 @@ pub async fn run(fleet: &Fleet, app_name: &str, follow: bool, server: Option<&st
                 eprintln!("Note: showing logs from {name} (use --server to pick)");
             }
             name.clone()
-        }
+        };
+        (s, app_name.to_string())
     } else {
         let app = fleet
             .apps
             .get(app_name)
-            .ok_or_else(|| anyhow::anyhow!("Unknown app: {app_name}"))?;
+            .ok_or_else(|| anyhow::anyhow!("Unknown app or runner: {app_name}"))?;
 
         if app.servers.is_empty() {
             bail!("App '{app_name}' has no servers assigned");
         }
 
-        if let Some(s) = server {
+        let s = if let Some(s) = server {
             if !app.servers.contains(&s.to_string()) {
                 bail!("App '{app_name}' is not deployed to server '{s}'");
             }
@@ -47,7 +61,8 @@ pub async fn run(fleet: &Fleet, app_name: &str, follow: bool, server: Option<&st
                 );
             }
             app.servers[0].clone()
-        }
+        };
+        (s, app_name.to_string())
     };
     let server_name = &server_name;
     let server = fleet
@@ -60,7 +75,7 @@ pub async fn run(fleet: &Fleet, app_name: &str, follow: bool, server: Option<&st
     sp.finish_and_clear();
 
     let follow_flag = if follow { " -f" } else { "" };
-    let cmd = format!("cd /opt/flow/{app_name} && docker compose logs{follow_flag} --tail 100");
+    let cmd = format!("cd /opt/flow/{dir_name} && docker compose logs{follow_flag} --tail 100");
 
     if follow {
         let mut child = pool.exec_streaming(server_name, &cmd).await?;
