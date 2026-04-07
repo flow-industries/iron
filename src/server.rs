@@ -227,7 +227,7 @@ fn generate_watcher_compose(gh_username: &str, gh_token: &str) -> String {
     format!(
         r#"services:
   watcher:
-    image: alpine:latest
+    image: debian:bookworm-slim
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /usr/bin/docker:/usr/bin/docker:ro
