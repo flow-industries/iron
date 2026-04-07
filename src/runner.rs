@@ -318,20 +318,34 @@ async fn fetch_github_runners(
         ),
     };
 
-    let resp = client
-        .get(&url)
-        .bearer_auth(token)
-        .header("User-Agent", "flow-iron")
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await?;
+    let mut all_runners = Vec::new();
+    let mut page = 1u32;
 
-    if !resp.status().is_success() {
-        bail!("GitHub API error: {}", resp.status());
+    loop {
+        let resp = client
+            .get(&url)
+            .query(&[("per_page", "100"), ("page", &page.to_string())])
+            .bearer_auth(token)
+            .header("User-Agent", "flow-iron")
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            bail!("GitHub API error: {}", resp.status());
+        }
+
+        let list: GitHubRunnerList = resp.json().await?;
+        let done = list.runners.len() < 100;
+        all_runners.extend(list.runners);
+
+        if done {
+            break;
+        }
+        page += 1;
     }
 
-    let list: GitHubRunnerList = resp.json().await?;
-    Ok(list.runners)
+    Ok(all_runners)
 }
 
 pub fn generate_compose(name: &str, runner: &Runner) -> String {
