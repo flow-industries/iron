@@ -36,15 +36,14 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
         out.push_str(&format!("      - {network}\n"));
     }
 
-    let wud_trigger = if app.deploy_strategy == DeployStrategy::Recreate {
-        "gameupdate"
+    let strategy = if app.deploy_strategy == DeployStrategy::Recreate {
+        "recreate"
     } else {
-        "rollout"
+        "rolling"
     };
     out.push_str("    labels:\n");
-    out.push_str("      - \"wud.watch=true\"\n");
-    out.push_str("      - \"wud.watch.digest=true\"\n");
-    out.push_str(&format!("      - \"wud.trigger.include={wud_trigger}\"\n"));
+    out.push_str("      - \"flow.watch=true\"\n");
+    out.push_str(&format!("      - \"flow.strategy={strategy}\"\n"));
 
     if let Some(ref routing) = app.routing {
         if let Some(ref health_path) = routing.health_path {
@@ -79,7 +78,7 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
         out.push_str(&format!("    image: {}\n", svc.image));
 
         out.push_str("    labels:\n");
-        out.push_str("      - \"wud.watch=false\"\n");
+        out.push_str("      - \"flow.watch=false\"\n");
 
         if !svc.env.is_empty() {
             out.push_str("    environment:\n");

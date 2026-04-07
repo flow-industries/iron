@@ -7,7 +7,6 @@ use crate::ssh::SshPool;
 use crate::ui;
 
 const CADDY_COMPOSE: &str = include_str!("../stacks/caddy/docker-compose.yml");
-const ROLLOUT_SCRIPT: &str = include_str!("../stacks/wud/rollout.sh");
 
 fn expand_tilde(path: &str) -> String {
     if let Some(rest) = path.strip_prefix("~/") {
@@ -224,31 +223,94 @@ async fn resolve_command(name: &str) -> Option<String> {
     }
 }
 
-fn generate_wud_compose(gh_username: &str, gh_token: &str) -> String {
+fn generate_watcher_compose(gh_username: &str, gh_token: &str) -> String {
     format!(
         r#"services:
-  wud:
-    image: getwud/wud:latest
+  watcher:
+    image: alpine:latest
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /usr/bin/docker:/usr/bin/docker:ro
       - /usr/libexec/docker/cli-plugins:/usr/libexec/docker/cli-plugins:ro
       - /opt/flow:/opt/flow:ro
-      - ./rollout.sh:/rollout.sh:ro
+      - ./watch.sh:/watch.sh:ro
+    entrypoint: /bin/sh
+    command: /watch.sh
     environment:
-      WUD_LOG_LEVEL: debug
-      WUD_WATCHER_LOCAL_CRON: "*/5 * * * * *"
-      WUD_WATCHER_LOCAL_WATCHBYDEFAULT: "false"
-      WUD_WATCHER_LOCAL_JITTER: "0"
-      WUD_REGISTRY_GHCR_FLOW_USERNAME: {gh_username}
-      WUD_REGISTRY_GHCR_FLOW_TOKEN: {gh_token}
-      WUD_TRIGGER_COMMAND_ROLLOUT_CMD: /rollout.sh
-      WUD_TRIGGER_COMMAND_ROLLOUT_SHELL: /bin/sh
-      WUD_TRIGGER_COMMAND_ROLLOUT_TIMEOUT: "120000"
-      WUD_TRIGGER_DOCKER_GAMEUPDATE_PRUNE: "true"
+      GHCR_USERNAME: {gh_username}
+      GHCR_TOKEN: {gh_token}
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "test $(($(date +%s) - $(cat /tmp/watcher-heartbeat 2>/dev/null || echo 0))) -lt 120"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 "#
     )
+}
+
+fn generate_watcher_script() -> &'static str {
+    r#"#!/bin/sh
+set -eu
+
+log() { echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') $*"; }
+
+INTERVAL="${CHECK_INTERVAL:-30}"
+LOCK="/tmp/flow-watcher.lock"
+
+while true; do
+  (
+    flock -n 9 || { log "SKIP: deploy in progress"; exit 0; }
+
+    if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
+      echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin > /dev/null 2>&1 \
+        || log "WARN: GHCR login failed"
+    fi
+
+    containers=$(docker ps --filter 'label=flow.watch=true' --format '{{.Names}}' 2>/dev/null)
+
+    for container in $containers; do
+      image=$(docker inspect "$container" --format '{{.Config.Image}}' 2>/dev/null) || continue
+      strategy=$(docker inspect "$container" --format '{{index .Config.Labels "flow.strategy"}}' 2>/dev/null) || continue
+      project=$(docker inspect "$container" --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || continue
+
+      compose="/opt/flow/${project}/docker-compose.yml"
+      [ -f "$compose" ] || continue
+
+      local_id=$(docker inspect "$container" --format '{{.Image}}' 2>/dev/null) || continue
+
+      if ! docker pull "$image" -q > /dev/null 2>&1; then
+        log "ERROR: pull failed for ${image}"
+        continue
+      fi
+
+      new_id=$(docker inspect "$image" --format '{{.Id}}' 2>/dev/null) || continue
+
+      [ "$local_id" = "$new_id" ] && continue
+
+      log "UPDATE: ${project} (${local_id##sha256:} -> ${new_id##sha256:})"
+
+      if [ "$strategy" = "recreate" ]; then
+        if docker compose -f "$compose" up -d --force-recreate 2>&1; then
+          log "RECREATE: ${project} done"
+        else
+          log "ERROR: recreate failed for ${project}"
+        fi
+      else
+        if docker rollout "$project" -f "$compose" 2>&1; then
+          log "ROLLOUT: ${project} done"
+        else
+          log "ERROR: rollout failed for ${project}"
+        fi
+      fi
+    done
+
+    date +%s > /tmp/watcher-heartbeat
+  ) 9>"$LOCK"
+
+  sleep "$INTERVAL"
+done
+"#
 }
 
 pub async fn deploy_infra(
@@ -257,6 +319,7 @@ pub async fn deploy_infra(
     network: &str,
     gh_username: Option<&str>,
     gh_token: Option<&str>,
+    has_ghcr_apps: bool,
 ) -> Result<()> {
     let sp = ui::spinner("Setting up infrastructure containers...");
 
@@ -266,7 +329,7 @@ pub async fn deploy_infra(
     )
     .await?;
 
-    pool.exec(server_name, "mkdir -p /opt/flow/caddy/sites /opt/flow/wud")
+    pool.exec(server_name, "mkdir -p /opt/flow/caddy/sites")
         .await?;
 
     pool.upload_file(
@@ -279,28 +342,35 @@ pub async fn deploy_infra(
     pool.exec(server_name, "cd /opt/flow/caddy && docker compose up -d")
         .await?;
 
-    if let (Some(username), Some(token)) = (gh_username, gh_token) {
-        let wud_compose = generate_wud_compose(username, token);
-        pool.upload_file(
-            server_name,
-            "/opt/flow/wud/docker-compose.yml",
-            &wud_compose,
-        )
-        .await?;
-        pool.upload_file(server_name, "/opt/flow/wud/rollout.sh", ROLLOUT_SCRIPT)
+    if has_ghcr_apps {
+        if let (Some(username), Some(token)) = (gh_username, gh_token) {
+            pool.exec(server_name, "mkdir -p /opt/flow/watcher").await?;
+            let watcher_compose = generate_watcher_compose(username, token);
+            pool.upload_file(
+                server_name,
+                "/opt/flow/watcher/docker-compose.yml",
+                &watcher_compose,
+            )
             .await?;
-        pool.exec(server_name, "chmod +x /opt/flow/wud/rollout.sh")
-            .await?;
-        pool.exec(server_name, "cd /opt/flow/wud && docker compose up -d")
-            .await?;
-        sp.finish_and_clear();
-        ui::success("Caddy + WUD started");
+            let watcher_script = generate_watcher_script();
+            pool.upload_file(server_name, "/opt/flow/watcher/watch.sh", watcher_script)
+                .await?;
+            pool.exec(server_name, "chmod +x /opt/flow/watcher/watch.sh")
+                .await?;
+            pool.exec(server_name, "cd /opt/flow/watcher && docker compose up -d")
+                .await?;
+            sp.finish_and_clear();
+            ui::success("Caddy + watcher started");
+        } else {
+            sp.finish_and_clear();
+            ui::success("Caddy started");
+            ui::error(
+                "Watcher skipped: set gh_username and gh_token in fleet.env.toml (or use `flow login gh`)",
+            );
+        }
     } else {
         sp.finish_and_clear();
         ui::success("Caddy started");
-        ui::error(
-            "WUD skipped: set gh_username and gh_token in fleet.env.toml (or use `flow login gh`)",
-        );
     }
 
     Ok(())
@@ -429,6 +499,7 @@ async fn add(
         &config.network,
         gh_username.as_deref(),
         gh_token.as_deref(),
+        false,
     )
     .await?;
     pool.close().await?;

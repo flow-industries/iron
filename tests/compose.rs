@@ -26,7 +26,7 @@ fn generate_simple_compose() {
     let app = simple_app();
     let output = generate(&app, "flow");
     assert!(output.contains("image: ghcr.io/flow-industries/site:latest"));
-    assert!(output.contains("wud.trigger.include=rollout"));
+    assert!(output.contains("flow.strategy=rolling"));
     assert!(output.contains("networks:"));
     assert!(output.contains("flow:"));
     assert!(output.contains("wget"));
@@ -38,7 +38,7 @@ fn generate_recreate_strategy() {
     let mut app = simple_app();
     app.deploy_strategy = DeployStrategy::Recreate;
     let output = generate(&app, "flow");
-    assert!(output.contains("wud.trigger.include=gameupdate"));
+    assert!(output.contains("flow.strategy=recreate"));
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn generate_with_sidecars() {
     let output = generate(&app, "flow");
     assert!(output.contains("postgres:"));
     assert!(output.contains("pg_isready"));
-    assert!(output.contains("wud.watch=false"));
+    assert!(output.contains("flow.watch=false"));
     assert!(output.contains("pgdata:"));
     assert!(output.contains("depends_on:"));
 }

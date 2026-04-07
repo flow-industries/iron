@@ -30,12 +30,15 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
         };
         ui::header(&display);
 
+        let has_ghcr_apps = fleet.apps.values().any(|a| a.image.starts_with("ghcr.io/"));
+
         if let Err(e) = crate::server::deploy_infra(
             &pool,
             server_name,
             &fleet.network,
             fleet.secrets.gh_username.as_deref(),
             fleet.secrets.gh_token.as_deref(),
+            has_ghcr_apps,
         )
         .await
         {
@@ -90,6 +93,12 @@ async fn check_server(
     check_containers(pool, server, apps).await?;
     check_caddy(pool, server, apps).await?;
     check_stale(pool, server, apps, fleet).await?;
+
+    let has_ghcr_apps = apps.iter().any(|a| a.image.starts_with("ghcr.io/"));
+    if has_ghcr_apps {
+        check_watcher(pool, server).await?;
+    }
+
     Ok(())
 }
 
@@ -183,7 +192,7 @@ async fn check_stale(
 
     let on_disk: Vec<&str> = output
         .lines()
-        .filter(|l| !l.is_empty() && *l != "caddy" && *l != "wud")
+        .filter(|l| !l.is_empty() && *l != "caddy" && *l != "watcher")
         .collect();
 
     let mut found_stale = false;
@@ -204,6 +213,38 @@ async fn check_stale(
     if !found_stale && !on_disk.is_empty() {
         println!();
         ui::success("no stale apps");
+    }
+
+    Ok(())
+}
+
+async fn check_watcher(pool: &SshPool, server: &str) -> Result<()> {
+    let output = pool
+        .exec(
+            server,
+            "docker ps --filter 'name=watcher-watcher-' --format '{{.Names}}\t{{.Status}}'",
+        )
+        .await
+        .unwrap_or_default();
+
+    println!();
+    let entry = output.lines().find(|l| !l.is_empty());
+    match entry {
+        Some(line) => {
+            let status = line.split_once('\t').map_or(line, |(_, s)| s);
+            if status.contains("healthy") && !status.contains("unhealthy") {
+                ui::success("watcher running (healthy)");
+            } else if status.contains("unhealthy") {
+                ui::error("watcher running (unhealthy — heartbeat stale)");
+            } else if status.starts_with("Up") {
+                ui::success("watcher running");
+            } else {
+                ui::error(&format!("watcher not running ({status})"));
+            }
+        }
+        None => {
+            ui::error("watcher missing");
+        }
     }
 
     Ok(())
