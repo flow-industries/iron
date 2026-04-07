@@ -250,64 +250,60 @@ fn generate_watcher_compose(gh_username: &str, gh_token: &str) -> String {
 }
 
 fn generate_watcher_script() -> &'static str {
+    // No single quotes allowed — upload_file heredoc escaping mangles them
     r#"#!/bin/sh
 set -eu
 
-log() { echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') $*"; }
-
 INTERVAL="${CHECK_INTERVAL:-30}"
-LOCK="/tmp/flow-watcher.lock"
+FMT="+%Y-%m-%dT%H:%M:%SZ"
+
+log() { echo "$(date -u "$FMT") $*"; }
 
 while true; do
-  (
-    flock -n 9 || { log "SKIP: deploy in progress"; exit 0; }
+  if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
+    echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin > /dev/null 2>&1 \
+      || log "WARN: GHCR login failed"
+  fi
 
-    if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
-      echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin > /dev/null 2>&1 \
-        || log "WARN: GHCR login failed"
+  containers=$(docker ps --filter "label=flow.watch=true" --format "{{.Names}}" 2>/dev/null)
+
+  for container in $containers; do
+    image=$(docker inspect "$container" --format "{{.Config.Image}}" 2>/dev/null) || continue
+    strategy=$(docker inspect "$container" --format "{{index .Config.Labels \"flow.strategy\"}}" 2>/dev/null) || continue
+    project=$(docker inspect "$container" --format "{{index .Config.Labels \"com.docker.compose.project\"}}" 2>/dev/null) || continue
+
+    compose="/opt/flow/${project}/docker-compose.yml"
+    [ -f "$compose" ] || continue
+
+    local_id=$(docker inspect "$container" --format "{{.Image}}" 2>/dev/null) || continue
+
+    if ! docker pull "$image" -q > /dev/null 2>&1; then
+      log "ERROR: pull failed for ${image}"
+      continue
     fi
 
-    containers=$(docker ps --filter 'label=flow.watch=true' --format '{{.Names}}' 2>/dev/null)
+    new_id=$(docker inspect "$image" --format "{{.Id}}" 2>/dev/null) || continue
 
-    for container in $containers; do
-      image=$(docker inspect "$container" --format '{{.Config.Image}}' 2>/dev/null) || continue
-      strategy=$(docker inspect "$container" --format '{{index .Config.Labels "flow.strategy"}}' 2>/dev/null) || continue
-      project=$(docker inspect "$container" --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || continue
+    [ "$local_id" = "$new_id" ] && continue
 
-      compose="/opt/flow/${project}/docker-compose.yml"
-      [ -f "$compose" ] || continue
+    log "UPDATE: ${project} (${local_id##sha256:} -> ${new_id##sha256:})"
 
-      local_id=$(docker inspect "$container" --format '{{.Image}}' 2>/dev/null) || continue
-
-      if ! docker pull "$image" -q > /dev/null 2>&1; then
-        log "ERROR: pull failed for ${image}"
-        continue
-      fi
-
-      new_id=$(docker inspect "$image" --format '{{.Id}}' 2>/dev/null) || continue
-
-      [ "$local_id" = "$new_id" ] && continue
-
-      log "UPDATE: ${project} (${local_id##sha256:} -> ${new_id##sha256:})"
-
-      if [ "$strategy" = "recreate" ]; then
-        if docker compose -f "$compose" up -d --force-recreate 2>&1; then
-          log "RECREATE: ${project} done"
-        else
-          log "ERROR: recreate failed for ${project}"
-        fi
+    if [ "$strategy" = "recreate" ]; then
+      if docker compose -f "$compose" up -d --force-recreate 2>&1; then
+        log "RECREATE: ${project} done"
       else
-        if docker rollout "$project" -f "$compose" 2>&1; then
-          log "ROLLOUT: ${project} done"
-        else
-          log "ERROR: rollout failed for ${project}"
-        fi
+        log "ERROR: recreate failed for ${project}"
       fi
-    done
+    else
+      if docker rollout "$project" -f "$compose" 2>&1; then
+        log "ROLLOUT: ${project} done"
+      else
+        log "ERROR: rollout failed for ${project}"
+      fi
+    fi
+  done
 
-    date +%s > /tmp/watcher-heartbeat
-  ) 9>"$LOCK"
-
+  date +%s > /tmp/watcher-heartbeat
   sleep "$INTERVAL"
 done
 "#
