@@ -6,30 +6,48 @@ use crate::ssh::SshPool;
 use crate::ui;
 
 pub async fn run(fleet: &Fleet, app_name: &str, follow: bool, server: Option<&str>) -> Result<()> {
-    let app = fleet
-        .apps
-        .get(app_name)
-        .ok_or_else(|| anyhow::anyhow!("Unknown app: {app_name}"))?;
+    let is_infra = app_name == "watcher" || app_name == "caddy";
 
-    if app.servers.is_empty() {
-        bail!("App '{app_name}' has no servers assigned");
-    }
-
-    let server_name = if let Some(s) = server {
-        if !app.servers.contains(&s.to_string()) {
-            bail!("App '{app_name}' is not deployed to server '{s}'");
+    let server_name = if is_infra {
+        if let Some(s) = server {
+            s.to_string()
+        } else {
+            let name = fleet
+                .servers
+                .keys()
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("No servers configured"))?;
+            if fleet.servers.len() > 1 {
+                eprintln!("Note: showing logs from {name} (use --server to pick)");
+            }
+            name.clone()
         }
-        s.to_string()
     } else {
-        if app.servers.len() > 1 {
-            eprintln!(
-                "Note: {} is on {} servers, showing logs from {} (use --server to pick)",
-                app_name,
-                app.servers.len(),
-                app.servers[0]
-            );
+        let app = fleet
+            .apps
+            .get(app_name)
+            .ok_or_else(|| anyhow::anyhow!("Unknown app: {app_name}"))?;
+
+        if app.servers.is_empty() {
+            bail!("App '{app_name}' has no servers assigned");
         }
-        app.servers[0].clone()
+
+        if let Some(s) = server {
+            if !app.servers.contains(&s.to_string()) {
+                bail!("App '{app_name}' is not deployed to server '{s}'");
+            }
+            s.to_string()
+        } else {
+            if app.servers.len() > 1 {
+                eprintln!(
+                    "Note: {} is on {} servers, showing logs from {} (use --server to pick)",
+                    app_name,
+                    app.servers.len(),
+                    app.servers[0]
+                );
+            }
+            app.servers[0].clone()
+        }
     };
     let server_name = &server_name;
     let server = fleet
