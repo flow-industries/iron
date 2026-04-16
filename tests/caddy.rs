@@ -68,3 +68,27 @@ fn multiple_domains() {
     assert!(fragment.contains("www.flow.talk {"));
     assert!(fragment.contains("health_interval 5s"));
 }
+
+#[test]
+fn no_health_check_without_health_path() {
+    let app = ResolvedApp {
+        name: "game-server".to_string(),
+        image: "test".to_string(),
+        servers: vec![],
+        port: Some(9999),
+        deploy_strategy: DeployStrategy::Recreate,
+        routing: Some(Routing {
+            domains: vec!["server.flow.game".to_string()],
+            health_path: None,
+            health_interval: None,
+        }),
+        env: HashMap::default(),
+        services: vec![],
+        ports: vec![],
+    };
+    let fragment = generate(&app).unwrap();
+    assert!(fragment.contains("server.flow.game {"));
+    assert!(fragment.contains("reverse_proxy game-server:9999"));
+    assert!(!fragment.contains("health_uri"));
+    assert!(!fragment.contains("health_interval"));
+}
