@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Fleet Server Safety Rules
+
+**NEVER SSH into any fleet server directly without asking the user first.** Always confirm before running `ssh`, `scp`, or any command that opens a direct connection to a fleet server. Using the `flow` CLI (deploy, stop, restart, remove, status, check, logs) is fine — those are the intended interface.
+
+**NEVER run state-changing commands directly on any fleet server unless the user explicitly asks for it.** No running `docker` commands, editing remote files, or executing arbitrary shell commands over SSH. All infrastructure changes must go through the `flow` CLI.
+
 ## What This Repo Is
 
 Infrastructure-as-code for the Flow ecosystem. The `flow` CLI (Rust) reads `fleet.toml` and generates Docker Compose files, Caddy reverse proxy fragments, and DNS records, then deploys via SSH. `flow server add` bootstraps new machines via Ansible (`setup.yml`). A built-in watcher container detects new GHCR images via `docker pull` + image ID comparison and triggers docker-rollout for zero-downtime deploys. This repo never contains Dockerfiles — service repos own those.
