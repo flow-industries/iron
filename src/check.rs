@@ -2,10 +2,11 @@ use anyhow::{Context, Result};
 use std::collections::{HashMap, HashSet};
 
 use crate::config::{Fleet, ResolvedApp, Server};
+use crate::notify::{Event, Notifier};
 use crate::ssh::SshPool;
 use crate::ui;
 
-pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
+pub async fn run(fleet: &Fleet, server_filter: Option<&str>, notifier: &Notifier) -> Result<()> {
     let filtered: HashMap<String, Server> = fleet
         .servers
         .iter()
@@ -36,9 +37,7 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
             &pool,
             server_name,
             &fleet.network,
-            fleet.secrets.gh_username.as_deref(),
-            fleet.secrets.gh_token.as_deref(),
-            fleet.secrets.discord_webhook_url.as_deref(),
+            &fleet.secrets,
             has_ghcr_apps,
         )
         .await
@@ -51,8 +50,14 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>) -> Result<()> {
             .cloned()
             .unwrap_or_default();
 
-        if let Err(e) = check_server(&pool, server_name, &apps, fleet).await {
-            ui::error(&format!("SSH error: {e}"));
+        match check_server(&pool, server_name, &apps, fleet).await {
+            Ok(issues) if !issues.is_empty() => {
+                notifier.send(Event::check_issue(server_name, &issues));
+            }
+            Err(e) => {
+                ui::error(&format!("SSH error: {e}"));
+            }
+            _ => {}
         }
     }
 
@@ -90,20 +95,25 @@ async fn check_server(
     server: &str,
     apps: &[&ResolvedApp],
     fleet: &Fleet,
-) -> Result<()> {
-    check_containers(pool, server, apps).await?;
-    check_caddy(pool, server, apps).await?;
-    check_stale(pool, server, apps, fleet).await?;
+) -> Result<Vec<String>> {
+    let mut issues = Vec::new();
+    issues.extend(check_containers(pool, server, apps).await?);
+    issues.extend(check_caddy(pool, server, apps).await?);
+    issues.extend(check_stale(pool, server, apps, fleet).await?);
 
     let has_ghcr_apps = apps.iter().any(|a| a.image.starts_with("ghcr.io/"));
     if has_ghcr_apps {
-        check_watcher(pool, server).await?;
+        issues.extend(check_watcher(pool, server).await?);
     }
 
-    Ok(())
+    Ok(issues)
 }
 
-async fn check_containers(pool: &SshPool, server: &str, apps: &[&ResolvedApp]) -> Result<()> {
+async fn check_containers(
+    pool: &SshPool,
+    server: &str,
+    apps: &[&ResolvedApp],
+) -> Result<Vec<String>> {
     let output = pool
         .exec(server, "docker ps --format '{{.Names}}\t{{.Status}}'")
         .await
@@ -114,6 +124,7 @@ async fn check_containers(pool: &SshPool, server: &str, apps: &[&ResolvedApp]) -
         .filter_map(|line| line.split_once('\t'))
         .collect();
 
+    let mut issues = Vec::new();
     println!();
     for app in apps {
         for (prefix, label) in expected_container_prefixes(app) {
@@ -125,19 +136,23 @@ async fn check_containers(pool: &SshPool, server: &str, apps: &[&ResolvedApp]) -
                     ui::success(&format!("{label} running"));
                 }
                 Some((_, status)) => {
-                    ui::error(&format!("{label} not running ({status})"));
+                    let msg = format!("{label} not running ({status})");
+                    ui::error(&msg);
+                    issues.push(msg);
                 }
                 None => {
-                    ui::error(&format!("{label} missing"));
+                    let msg = format!("{label} missing");
+                    ui::error(&msg);
+                    issues.push(msg);
                 }
             }
         }
     }
 
-    Ok(())
+    Ok(issues)
 }
 
-async fn check_caddy(pool: &SshPool, server: &str, apps: &[&ResolvedApp]) -> Result<()> {
+async fn check_caddy(pool: &SshPool, server: &str, apps: &[&ResolvedApp]) -> Result<Vec<String>> {
     let expected: HashSet<&str> = apps
         .iter()
         .filter(|a| a.routing.is_some())
@@ -152,25 +167,30 @@ async fn check_caddy(pool: &SshPool, server: &str, apps: &[&ResolvedApp]) -> Res
     let on_disk: HashSet<&str> = output.lines().filter(|l| !l.is_empty()).collect();
 
     if expected.is_empty() && on_disk.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
 
+    let mut issues = Vec::new();
     println!();
     for name in &expected {
         if on_disk.contains(name) {
             ui::success(&format!("caddy: {name}"));
         } else {
-            ui::error(&format!("caddy: {name} missing"));
+            let msg = format!("caddy: {name} missing");
+            ui::error(&msg);
+            issues.push(msg);
         }
     }
 
     for name in &on_disk {
         if !expected.contains(name) {
-            ui::error(&format!("caddy: {name} stale"));
+            let msg = format!("caddy: {name} stale");
+            ui::error(&msg);
+            issues.push(msg);
         }
     }
 
-    Ok(())
+    Ok(issues)
 }
 
 async fn check_stale(
@@ -178,7 +198,7 @@ async fn check_stale(
     server: &str,
     apps: &[&ResolvedApp],
     fleet: &Fleet,
-) -> Result<()> {
+) -> Result<Vec<String>> {
     let mut expected: HashSet<String> = apps.iter().map(|a| a.name.clone()).collect();
     for (name, runner) in &fleet.runners {
         if runner.server == server {
@@ -196,19 +216,20 @@ async fn check_stale(
         .filter(|l| !l.is_empty() && *l != "caddy" && *l != "watcher")
         .collect();
 
+    let mut issues = Vec::new();
     let mut found_stale = false;
     for dir in &on_disk {
         if expected.contains(*dir) {
             continue;
         }
         found_stale = true;
-        if fleet.apps.contains_key(*dir) || fleet.runners.contains_key(*dir) {
-            ui::error(&format!(
-                "stale: /opt/flow/{dir} (assigned to different server)"
-            ));
+        let msg = if fleet.apps.contains_key(*dir) || fleet.runners.contains_key(*dir) {
+            format!("stale: /opt/flow/{dir} (assigned to different server)")
         } else {
-            ui::error(&format!("stale: /opt/flow/{dir} (not in fleet.toml)"));
-        }
+            format!("stale: /opt/flow/{dir} (not in fleet.toml)")
+        };
+        ui::error(&msg);
+        issues.push(msg);
     }
 
     if !found_stale && !on_disk.is_empty() {
@@ -216,10 +237,10 @@ async fn check_stale(
         ui::success("no stale apps");
     }
 
-    Ok(())
+    Ok(issues)
 }
 
-async fn check_watcher(pool: &SshPool, server: &str) -> Result<()> {
+async fn check_watcher(pool: &SshPool, server: &str) -> Result<Vec<String>> {
     let output = pool
         .exec(
             server,
@@ -228,27 +249,31 @@ async fn check_watcher(pool: &SshPool, server: &str) -> Result<()> {
         .await
         .unwrap_or_default();
 
+    let mut issues = Vec::new();
     println!();
     let entry = output.lines().find(|l| !l.is_empty());
-    match entry {
-        Some(line) => {
-            let status = line.split_once('\t').map_or(line, |(_, s)| s);
-            if status.contains("healthy") && !status.contains("unhealthy") {
-                ui::success("watcher running (healthy)");
-            } else if status.contains("unhealthy") {
-                ui::error("watcher running (unhealthy — heartbeat stale)");
-            } else if status.starts_with("Up") {
-                ui::success("watcher running");
-            } else {
-                ui::error(&format!("watcher not running ({status})"));
-            }
+    if let Some(line) = entry {
+        let status = line.split_once('\t').map_or(line, |(_, s)| s);
+        if status.contains("healthy") && !status.contains("unhealthy") {
+            ui::success("watcher running (healthy)");
+        } else if status.contains("unhealthy") {
+            let msg = "watcher running (unhealthy — heartbeat stale)".to_string();
+            ui::error(&msg);
+            issues.push(msg);
+        } else if status.starts_with("Up") {
+            ui::success("watcher running");
+        } else {
+            let msg = format!("watcher not running ({status})");
+            ui::error(&msg);
+            issues.push(msg);
         }
-        None => {
-            ui::error("watcher missing");
-        }
+    } else {
+        let msg = "watcher missing".to_string();
+        ui::error(&msg);
+        issues.push(msg);
     }
 
-    Ok(())
+    Ok(issues)
 }
 
 async fn check_dns(fleet: &Fleet, filtered: &HashMap<String, Server>) {

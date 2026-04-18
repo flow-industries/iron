@@ -14,6 +14,7 @@ pub mod ghcr;
 pub mod init;
 pub mod login;
 pub mod logs;
+pub mod notify;
 pub mod remove;
 pub mod restart;
 pub mod runner;

@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail};
 use std::path::Path;
 
 use crate::cli::ServerCommand;
-use crate::config::{EnvConfig, FleetConfig, Server};
+use crate::config::{EnvConfig, FleetConfig, FleetSecrets, Server};
 use crate::ssh::SshPool;
 use crate::ui;
 
@@ -227,10 +227,19 @@ fn generate_watcher_compose(
     gh_username: &str,
     gh_token: &str,
     discord_webhook_url: Option<&str>,
+    telegram_bot_token: Option<&str>,
+    telegram_chat_id: Option<&str>,
 ) -> String {
-    let webhook_env = discord_webhook_url
-        .map(|url| format!("      DISCORD_WEBHOOK_URL: {url}\n"))
-        .unwrap_or_default();
+    let mut extra_env = String::new();
+    if let Some(url) = discord_webhook_url {
+        extra_env.push_str(&format!("      DISCORD_WEBHOOK_URL: {url}\n"));
+    }
+    if let Some(token) = telegram_bot_token {
+        extra_env.push_str(&format!("      TELEGRAM_BOT_TOKEN: {token}\n"));
+    }
+    if let Some(chat_id) = telegram_chat_id {
+        extra_env.push_str(&format!("      TELEGRAM_CHAT_ID: {chat_id}\n"));
+    }
     format!(
         r#"services:
   watcher:
@@ -246,7 +255,7 @@ fn generate_watcher_compose(
     environment:
       GHCR_USERNAME: {gh_username}
       GHCR_TOKEN: {gh_token}
-{webhook_env}    restart: always
+{extra_env}    restart: always
     healthcheck:
       test: ["CMD-SHELL", "test $(($(date +%s) - $(cat /tmp/watcher-heartbeat 2>/dev/null || echo 0))) -lt 120"]
       interval: 30s
@@ -267,14 +276,43 @@ FMT="+%Y-%m-%dT%H:%M:%SZ"
 log() { echo "$(date -u "$FMT") $*"; }
 
 notify() {
+  local level="$1"
+  local title="$2"
+  local desc="$3"
+
+  case "$level" in
+    success) color=3066993 ;;
+    failure) color=15158332 ;;
+    *)       color=3447003 ;;
+  esac
+
   if [ -n "${DISCORD_WEBHOOK_URL:-}" ]; then
+    payload=$(printf "{\"embeds\":[{\"title\":\"%s\",\"description\":\"%s\",\"color\":%d}]}" "$title" "$desc" "$color")
     curl -s -X POST "$DISCORD_WEBHOOK_URL" \
       -H "Content-Type: application/json" \
-      -d "{\"content\": \"$1\"}" > /dev/null 2>&1 || true
+      -d "$payload" > /dev/null 2>&1 || true
+  fi
+
+  if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+    case "$level" in
+      success) emoji="✅" ;;
+      failure) emoji="❌" ;;
+      *)       emoji="ℹ️" ;;
+    esac
+    text=$(printf "%s <b>%s</b>\n%s" "$emoji" "$title" "$desc")
+    tg_payload=$(printf "{\"chat_id\":\"%s\",\"text\":\"%s\",\"parse_mode\":\"HTML\"}" "$TELEGRAM_CHAT_ID" "$text")
+    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+      -H "Content-Type: application/json" \
+      -d "$tg_payload" > /dev/null 2>&1 || true
   fi
 }
 
-if [ -n "${DISCORD_WEBHOOK_URL:-}" ] && ! command -v curl > /dev/null 2>&1; then
+needs_curl=false
+if [ -n "${DISCORD_WEBHOOK_URL:-}" ] || [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+  needs_curl=true
+fi
+
+if [ "$needs_curl" = "true" ] && ! command -v curl > /dev/null 2>&1; then
   apt-get update -qq > /dev/null 2>&1 && apt-get install -y -qq curl > /dev/null 2>&1
 fi
 
@@ -298,7 +336,7 @@ while true; do
 
     if ! docker pull "$image" -q > /dev/null 2>&1; then
       log "ERROR: pull failed for ${image}"
-      notify "[${project}] pull failed"
+      notify "failure" "Pull Failed: ${project}" "Failed to pull ${image}"
       continue
     fi
 
@@ -311,22 +349,22 @@ while true; do
     log "UPDATE: ${project} (${short_old} -> ${short_new})"
 
     if [ "$strategy" = "recreate" ]; then
-      notify "[${project}] update detected, recreating (${short_old} -> ${short_new})"
+      notify "info" "Update Detected: ${project}" "Recreating (${short_old} -> ${short_new})"
       if docker compose -f "$compose" up -d --force-recreate 2>&1; then
         log "RECREATE: ${project} done"
-        notify "[${project}] recreate complete"
+        notify "success" "Recreate Complete: ${project}" "Image updated (${short_old} -> ${short_new})"
       else
         log "ERROR: recreate failed for ${project}"
-        notify "[${project}] recreate failed"
+        notify "failure" "Recreate Failed: ${project}" "Failed to recreate container"
       fi
     else
-      notify "[${project}] update detected, rolling out (${short_old} -> ${short_new})"
+      notify "info" "Update Detected: ${project}" "Rolling out (${short_old} -> ${short_new})"
       if docker rollout "$project" -f "$compose" 2>&1; then
         log "ROLLOUT: ${project} done"
-        notify "[${project}] rollout complete"
+        notify "success" "Rollout Complete: ${project}" "Image updated (${short_old} -> ${short_new})"
       else
         log "ERROR: rollout failed for ${project}"
-        notify "[${project}] rollout failed"
+        notify "failure" "Rollout Failed: ${project}" "Failed to roll out update"
       fi
     fi
   done
@@ -341,9 +379,7 @@ pub async fn deploy_infra(
     pool: &SshPool,
     server_name: &str,
     network: &str,
-    gh_username: Option<&str>,
-    gh_token: Option<&str>,
-    discord_webhook_url: Option<&str>,
+    secrets: &FleetSecrets,
     has_ghcr_apps: bool,
 ) -> Result<()> {
     let sp = ui::spinner("Setting up infrastructure containers...");
@@ -368,9 +404,18 @@ pub async fn deploy_infra(
         .await?;
 
     if has_ghcr_apps {
+        let gh_username = secrets.gh_username.as_deref().filter(|s| !s.is_empty());
+        let gh_token = secrets.gh_token.as_deref().filter(|s| !s.is_empty());
+
         if let (Some(username), Some(token)) = (gh_username, gh_token) {
             pool.exec(server_name, "mkdir -p /opt/flow/watcher").await?;
-            let watcher_compose = generate_watcher_compose(username, token, discord_webhook_url);
+            let watcher_compose = generate_watcher_compose(
+                username,
+                token,
+                secrets.discord_webhook_url.as_deref(),
+                secrets.telegram_bot_token.as_deref(),
+                secrets.telegram_chat_id.as_deref(),
+            );
             pool.upload_file(
                 server_name,
                 "/opt/flow/watcher/docker-compose.yml",
@@ -518,16 +563,13 @@ async fn add(
         ssh_key: cli_ssh_key.map(String::from),
     };
     let pool = SshPool::connect_one(name, &server_entry).await?;
-    deploy_infra(
-        &pool,
-        name,
-        &config.network,
-        gh_username.as_deref(),
-        gh_token.as_deref(),
-        None,
-        false,
-    )
-    .await?;
+    let add_secrets = FleetSecrets {
+        gh_token,
+        gh_username,
+        cloudflare_api_token: Some(cf_token.clone()),
+        ..FleetSecrets::default()
+    };
+    deploy_infra(&pool, name, &config.network, &add_secrets, false).await?;
     pool.close().await?;
 
     write_server_to_config(config_path, name, &hostname, ip, user, cli_ssh_key)?;
