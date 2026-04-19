@@ -4,11 +4,17 @@ use crate::caddy;
 use crate::cloudflare;
 use crate::compose;
 use crate::config::{DeployStrategy, Fleet, ResolvedApp, Runner};
+use crate::notify::{Event, Notifier};
 use crate::runner;
 use crate::ssh::SshPool;
 use crate::ui;
 
-pub async fn run(fleet: &Fleet, app_filter: Option<&str>, force: bool) -> Result<()> {
+pub async fn run(
+    fleet: &Fleet,
+    app_filter: Option<&str>,
+    force: bool,
+    notifier: &Notifier,
+) -> Result<()> {
     let (apps, runners): (Vec<&ResolvedApp>, Vec<(&str, &Runner)>) = if let Some(name) = app_filter
     {
         if let Some(app) = fleet.apps.get(name) {
@@ -67,7 +73,7 @@ pub async fn run(fleet: &Fleet, app_filter: Option<&str>, force: bool) -> Result
     }
 
     for app in &apps {
-        deploy_app(fleet, app, &pool, force).await?;
+        deploy_app(fleet, app, &pool, force, notifier).await?;
     }
 
     for (name, r) in &runners {
@@ -79,7 +85,13 @@ pub async fn run(fleet: &Fleet, app_filter: Option<&str>, force: bool) -> Result
     Ok(())
 }
 
-async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool, force: bool) -> Result<()> {
+async fn deploy_app(
+    fleet: &Fleet,
+    app: &ResolvedApp,
+    pool: &SshPool,
+    force: bool,
+    notifier: &Notifier,
+) -> Result<()> {
     if app.servers.is_empty() {
         bail!("App '{}' has no servers assigned", app.name);
     }
@@ -92,83 +104,25 @@ async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool, force: boo
     let caddy_fragment = caddy::generate(app);
 
     for server_name in &app.servers {
-        let sp = ui::spinner(&format!("  {server_name} → uploading files..."));
+        notifier.send(Event::deploy_started(&app.name, server_name));
 
-        let app_dir = format!("/opt/flow/{}", app.name);
+        let result = deploy_app_to_server(
+            app,
+            pool,
+            server_name,
+            &compose_yaml,
+            &env_content,
+            caddy_fragment.as_deref(),
+            force,
+        )
+        .await;
 
-        pool.exec(server_name, &format!("mkdir -p {app_dir}"))
-            .await?;
-
-        let compose_path = format!("{app_dir}/docker-compose.yml");
-        pool.upload_file(server_name, &compose_path, &compose_yaml)
-            .await?;
-
-        if !env_content.trim().is_empty() {
-            let env_path = format!("{app_dir}/.env");
-            pool.upload_file(server_name, &env_path, &env_content)
-                .await?;
-            pool.exec(server_name, &format!("chmod 600 {env_path}"))
-                .await?;
+        if let Err(ref e) = result {
+            notifier.send(Event::deploy_failed(&app.name, server_name, &e.to_string()));
+            result?;
         }
 
-        sp.finish_and_clear();
-
-        let sp = ui::spinner(&format!("  {server_name} → pulling images..."));
-        pool.exec(server_name, &format!("cd {app_dir} && docker compose pull"))
-            .await?;
-        sp.finish_and_clear();
-
-        let sp = ui::spinner(&format!("  {server_name} → deploying..."));
-        if force {
-            pool.exec(
-                server_name,
-                &format!("cd {app_dir} && docker compose up -d --force-recreate"),
-            )
-            .await?;
-        } else {
-            match app.deploy_strategy {
-                DeployStrategy::Rolling => {
-                    pool.exec(
-                        server_name,
-                        &format!("cd {app_dir} && docker compose up -d"),
-                    )
-                    .await?;
-                    pool.exec(
-                        server_name,
-                        &format!(
-                            "docker rollout {} -f {}/docker-compose.yml",
-                            app.name, app_dir
-                        ),
-                    )
-                    .await?;
-                }
-                DeployStrategy::Recreate => {
-                    pool.exec(
-                        server_name,
-                        &format!("cd {app_dir} && docker compose up -d"),
-                    )
-                    .await?;
-                }
-            }
-        }
-        sp.finish_and_clear();
-
-        if let Some(ref fragment) = caddy_fragment {
-            let sp = ui::spinner(&format!("  {server_name} → updating Caddy..."));
-            let caddy_sites_dir = "/opt/flow/caddy/sites";
-            pool.exec(server_name, &format!("mkdir -p {caddy_sites_dir}"))
-                .await?;
-            let caddy_path = format!("{}/{}", caddy_sites_dir, app.name);
-            pool.upload_file(server_name, &caddy_path, fragment).await?;
-            pool.exec(
-                server_name,
-                "cd /opt/flow/caddy && docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile",
-            )
-            .await?;
-            sp.finish_and_clear();
-        }
-
-        ui::success(&format!("  {} → {}", server_name, app.name));
+        notifier.send(Event::deploy_completed(&app.name, server_name));
     }
 
     if let Some(ref routing) = app.routing {
@@ -196,6 +150,95 @@ async fn deploy_app(fleet: &Fleet, app: &ResolvedApp, pool: &SshPool, force: boo
         }
     }
 
+    Ok(())
+}
+
+async fn deploy_app_to_server(
+    app: &ResolvedApp,
+    pool: &SshPool,
+    server_name: &str,
+    compose_yaml: &str,
+    env_content: &str,
+    caddy_fragment: Option<&str>,
+    force: bool,
+) -> Result<()> {
+    let sp = ui::spinner(&format!("  {server_name} → uploading files..."));
+
+    let app_dir = format!("/opt/flow/{}", app.name);
+
+    pool.exec(server_name, &format!("mkdir -p {app_dir}"))
+        .await?;
+
+    let compose_path = format!("{app_dir}/docker-compose.yml");
+    pool.upload_file(server_name, &compose_path, compose_yaml)
+        .await?;
+
+    if !env_content.trim().is_empty() {
+        let env_path = format!("{app_dir}/.env");
+        pool.upload_file(server_name, &env_path, env_content)
+            .await?;
+        pool.exec(server_name, &format!("chmod 600 {env_path}"))
+            .await?;
+    }
+
+    sp.finish_and_clear();
+
+    let sp = ui::spinner(&format!("  {server_name} → pulling images..."));
+    pool.exec(server_name, &format!("cd {app_dir} && docker compose pull"))
+        .await?;
+    sp.finish_and_clear();
+
+    let sp = ui::spinner(&format!("  {server_name} → deploying..."));
+    if force {
+        pool.exec(
+            server_name,
+            &format!("cd {app_dir} && docker compose up -d --force-recreate"),
+        )
+        .await?;
+    } else {
+        match app.deploy_strategy {
+            DeployStrategy::Rolling => {
+                pool.exec(
+                    server_name,
+                    &format!("cd {app_dir} && docker compose up -d"),
+                )
+                .await?;
+                pool.exec(
+                    server_name,
+                    &format!(
+                        "docker rollout {} -f {}/docker-compose.yml",
+                        app.name, app_dir
+                    ),
+                )
+                .await?;
+            }
+            DeployStrategy::Recreate => {
+                pool.exec(
+                    server_name,
+                    &format!("cd {app_dir} && docker compose up -d"),
+                )
+                .await?;
+            }
+        }
+    }
+    sp.finish_and_clear();
+
+    if let Some(fragment) = caddy_fragment {
+        let sp = ui::spinner(&format!("  {server_name} → updating Caddy..."));
+        let caddy_sites_dir = "/opt/flow/caddy/sites";
+        pool.exec(server_name, &format!("mkdir -p {caddy_sites_dir}"))
+            .await?;
+        let caddy_path = format!("{caddy_sites_dir}/{}", app.name);
+        pool.upload_file(server_name, &caddy_path, fragment).await?;
+        pool.exec(
+            server_name,
+            "cd /opt/flow/caddy && docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile",
+        )
+        .await?;
+        sp.finish_and_clear();
+    }
+
+    ui::success(&format!("  {server_name} → {}", app.name));
     Ok(())
 }
 

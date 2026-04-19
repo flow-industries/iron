@@ -268,3 +268,23 @@ const CF_API: &str = "https://api.cloudflare.com/client/v4";
 4. Would a developer reading this code understand it without the comment?
 
 **If you answered "yes" to questions 1, 2, or 4, DO NOT write the comment. Fix the code instead.**
+
+### Commit conventions: ABSOLUTE HARD RULE
+
+When creating git commits, always:
+
+1. **Never attribute to Claude.** Do not add Claude as author or committer. Do not add `Co-Authored-By: Claude`, `https://claude.ai/code/...` trailers, "Generated with Claude Code" lines, or any other Claude attribution.
+2. **Never sign commits with Claude-owned keys.** If the repo has `commit.gpgsign=true` with a Claude-owned `user.signingkey`, pass `--no-gpg-sign` and `-c commit.gpgsign=false`. This is pre-authorized for this rule specifically; no need to ask.
+3. **Always set both author and committer to the user.** Use `git config user.name` / `user.email` if set; otherwise detect from the most recent non-Claude commit in the repo via `git log`. Set via `--author="Name <email>"` and `GIT_COMMITTER_NAME` + `GIT_COMMITTER_EMAIL` env vars.
+4. **Commit message format: one lowercase sentence, no period, no body.**
+   - NEVER write a multi-line body.
+   - NEVER use bullet lists, hyphens, or numbered lists.
+   - NEVER write explanations, rationale, or "why" in the message.
+   - Just describe what was done in a single lowercase sentence.
+   - Good: `add container lifecycle notification system with discord and telegram support`
+   - Good: `fix off-by-one in pagination`
+   - Bad: `Add notification system\n\nIntroduces a notify module...` (has body)
+   - Bad: `- add notify module\n- add telegram support` (is a list)
+   - Bad: `Add notification system.` (capitalized, has period)
+
+These rules apply to every commit in this repo, always.

@@ -12,7 +12,8 @@ async fn main() -> Result<()> {
             with_hardening,
         } => {
             let fleet = iron::config::load(&cli.config)?;
-            iron::check::run(&fleet, server.as_deref()).await?;
+            let notifier = iron::notify::Notifier::from_secrets(&fleet.secrets);
+            iron::check::run(&fleet, server.as_deref(), &notifier).await?;
             if with_hardening {
                 iron::server::run_hardening(&cli.config, server.as_deref()).await?;
             }
@@ -20,7 +21,8 @@ async fn main() -> Result<()> {
         }
         Command::Deploy { app, force } => {
             let fleet = iron::config::load(&cli.config)?;
-            iron::deploy::run(&fleet, app.as_deref(), force).await
+            let notifier = iron::notify::Notifier::from_secrets(&fleet.secrets);
+            iron::deploy::run(&fleet, app.as_deref(), force, &notifier).await
         }
         Command::Status {
             server,
@@ -43,13 +45,19 @@ async fn main() -> Result<()> {
         }
         Command::Stop { app, server } => {
             let fleet = iron::config::load(&cli.config)?;
-            iron::stop::run(&fleet, &app, server.as_deref()).await
+            let notifier = iron::notify::Notifier::from_secrets(&fleet.secrets);
+            iron::stop::run(&fleet, &app, server.as_deref(), &notifier).await
         }
         Command::Restart { app, server } => {
             let fleet = iron::config::load(&cli.config)?;
-            iron::restart::run(&fleet, &app, server.as_deref()).await
+            let notifier = iron::notify::Notifier::from_secrets(&fleet.secrets);
+            iron::restart::run(&fleet, &app, server.as_deref(), &notifier).await
         }
-        Command::Remove { app, yes } => iron::remove::run(&cli.config, &app, yes).await,
+        Command::Remove { app, yes } => {
+            let fleet = iron::config::load(&cli.config)?;
+            let notifier = iron::notify::Notifier::from_secrets(&fleet.secrets);
+            iron::remove::run(&cli.config, &app, yes, &notifier).await
+        }
         Command::Runner { command } => iron::runner::run(&cli.config, command).await,
         Command::Init => iron::init::run(&cli.config).await,
         Command::Server { command } => iron::server::run(&cli.config, command).await,

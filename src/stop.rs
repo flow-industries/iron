@@ -1,10 +1,16 @@
 use anyhow::{Result, bail};
 
 use crate::config::Fleet;
+use crate::notify::{Event, Notifier};
 use crate::ssh::SshPool;
 use crate::ui;
 
-pub async fn run(fleet: &Fleet, app_name: &str, server_filter: Option<&str>) -> Result<()> {
+pub async fn run(
+    fleet: &Fleet,
+    app_name: &str,
+    server_filter: Option<&str>,
+    notifier: &Notifier,
+) -> Result<()> {
     let app = fleet
         .apps
         .get(app_name)
@@ -38,6 +44,7 @@ pub async fn run(fleet: &Fleet, app_name: &str, server_filter: Option<&str>) -> 
             .await?;
         sp.finish_and_clear();
         ui::success(&format!("{server_name} → {app_name} stopped"));
+        notifier.send(Event::app_stopped(app_name, server_name));
     }
 
     pool.close().await?;

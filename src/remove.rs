@@ -3,10 +3,16 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::cloudflare;
+use crate::notify::{Event, Notifier};
 use crate::ssh::SshPool;
 use crate::ui;
 
-pub async fn run(config_path: &str, app_name: &str, skip_confirm: bool) -> Result<()> {
+pub async fn run(
+    config_path: &str,
+    app_name: &str,
+    skip_confirm: bool,
+    notifier: &Notifier,
+) -> Result<()> {
     let fleet = crate::config::load(config_path)?;
 
     let app = fleet
@@ -93,6 +99,7 @@ pub async fn run(config_path: &str, app_name: &str, skip_confirm: bool) -> Resul
     remove_app_from_config(config, app_name)?;
     remove_app_from_env_config(config, app_name)?;
 
+    notifier.send(Event::app_removed(app_name, &app.servers));
     ui::success(&format!("{app_name} fully removed"));
     Ok(())
 }

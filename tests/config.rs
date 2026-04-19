@@ -392,6 +392,47 @@ discord_webhook_url = "https://discord.com/api/webhooks/123/abc"
 }
 
 #[test]
+fn telegram_secrets_parsed_from_env_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let fleet_path = dir.path().join("fleet.toml");
+    let env_path = dir.path().join("fleet.env.toml");
+
+    std::fs::write(
+        &fleet_path,
+        r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 3000
+"#,
+    )
+    .unwrap();
+
+    std::fs::write(
+        &env_path,
+        r#"
+[fleet]
+telegram_bot_token = "123456:ABC-DEF"
+telegram_chat_id = "-1001234567890"
+"#,
+    )
+    .unwrap();
+
+    let fleet = load(fleet_path.to_str().unwrap()).unwrap();
+    assert_eq!(
+        fleet.secrets.telegram_bot_token.as_deref(),
+        Some("123456:ABC-DEF")
+    );
+    assert_eq!(
+        fleet.secrets.telegram_chat_id.as_deref(),
+        Some("-1001234567890")
+    );
+}
+
+#[test]
 fn validate_server_invalid_ip() {
     let toml_str = r#"
 [servers.flow-1]
