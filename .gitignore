@@ -27,3 +27,8 @@ vault_password
 fleet.toml
 fleet.env.toml
 fleet.old.toml
+
+# Node / Discord bot
+discord-bot/node_modules/
+discord-bot/dist/
+discord-bot/coverage/
