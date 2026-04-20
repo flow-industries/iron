@@ -6,7 +6,15 @@ use iron::cli::{Cli, Command};
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    match cli.command {
+    if cli.version {
+        return iron::version::run(&cli.config).await;
+    }
+
+    let Some(command) = cli.command else {
+        return Ok(());
+    };
+
+    match command {
         Command::Check {
             server,
             with_hardening,
@@ -68,6 +76,7 @@ async fn main() -> Result<()> {
         }
         Command::Env { args } => iron::env::run(&cli.config, &args),
         Command::Login { command } => iron::login::run(&cli.config, command.as_ref()).await,
-        Command::Update => iron::update::run().await,
+        Command::Update { git, git_url } => iron::update::run(git, git_url.as_deref()).await,
+        Command::Version => iron::version::run(&cli.config).await,
     }
 }

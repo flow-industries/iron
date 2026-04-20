@@ -24,3 +24,4 @@ pub mod status;
 pub mod stop;
 pub mod ui;
 pub mod update;
+pub mod version;
