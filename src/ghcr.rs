@@ -179,6 +179,15 @@ async fn fetch_one(
     Some(PackageRelease { tag, published })
 }
 
+pub async fn fetch_latest_release(
+    token: Option<&str>,
+    owner: &str,
+    package: &str,
+) -> Option<PackageRelease> {
+    let client = reqwest::Client::new();
+    fetch_one(&client, token?, owner, package).await
+}
+
 #[allow(clippy::implicit_hasher)]
 pub async fn fetch_releases(
     token: Option<&str>,

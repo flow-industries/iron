@@ -1,0 +1,30 @@
+name: Publish to crates.io
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.88
+
+      - name: Verify tag matches Cargo.toml version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          crate_version=$(cargo metadata --no-deps --format-version 1 \
+            | python3 -c "import json, sys; print(json.load(sys.stdin)['packages'][0]['version'])")
+          if [ "$tag" != "$crate_version" ]; then
+            echo "Tag v$tag does not match Cargo.toml version $crate_version"
+            exit 1
+          fi
+
+      - name: Publish
+        run: cargo publish --locked --token "$CARGO_REGISTRY_TOKEN"
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

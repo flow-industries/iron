@@ -8,6 +8,8 @@ use crate::ui;
 
 const CADDY_COMPOSE: &str = include_str!("../stacks/caddy/docker-compose.yml");
 
+pub const WATCHER_IMAGE: &str = "debian:bookworm-slim";
+
 fn expand_tilde(path: &str) -> String {
     if let Some(rest) = path.strip_prefix("~/") {
         if let Ok(home) = std::env::var("HOME") {
@@ -243,7 +245,7 @@ fn generate_watcher_compose(
     format!(
         r#"services:
   watcher:
-    image: debian:bookworm-slim
+    image: {WATCHER_IMAGE}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /usr/bin/docker:/usr/bin/docker:ro

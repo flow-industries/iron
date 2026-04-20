@@ -1,10 +1,19 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "flow", about = "Deploy and manage the Flow fleet")]
+#[command(
+    name = "flow",
+    about = "Deploy and manage the Flow fleet",
+    arg_required_else_help = true,
+    disable_version_flag = true
+)]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Command,
+    pub command: Option<Command>,
+
+    /// Print version information and exit
+    #[arg(short = 'V', long = "version")]
+    pub version: bool,
 
     /// Path to fleet.toml (default: fleet.toml in current directory)
     #[arg(long, global = true, default_value = "fleet.toml")]
@@ -141,7 +150,18 @@ pub enum Command {
     },
 
     /// Update flow CLI to the latest version
-    Update,
+    Update {
+        /// Install from the git repository instead of crates.io
+        #[arg(long)]
+        git: bool,
+
+        /// Git repository URL (implies --git, defaults to the flow-industries/iron upstream)
+        #[arg(long, value_name = "URL")]
+        git_url: Option<String>,
+    },
+
+    /// Print version information and the latest watcher image tag on GHCR
+    Version,
 }
 
 #[derive(Subcommand)]
