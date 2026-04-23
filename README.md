@@ -20,14 +20,14 @@ cargo install --path .
 
 ## Documentation
 
-Full documentation at **[flow.industries/en/iron](https://flow.industries/en/iron)**.
+Full documentation at **[docs.flow.industries/en/iron](https://docs.flow.industries/en/iron)**.
 
-- [Getting started](https://flow.industries/en/iron/getting-started) — install, init, first deploy
-- [Concepts](https://flow.industries/en/iron/concepts) — fleet, servers, apps, sidecars, routing, watcher
-- [Configuration](https://flow.industries/en/iron/configuration) — `fleet.toml` and `fleet.env.toml` reference
-- [Deploy pipeline](https://flow.industries/en/iron/deploy) — what `flow deploy` does end-to-end
-- [Servers](https://flow.industries/en/iron/servers), [Apps](https://flow.industries/en/iron/apps), [Env](https://flow.industries/en/iron/env), [Databases](https://flow.industries/en/iron/databases), [Runners](https://flow.industries/en/iron/runners)
-- [Lifecycle](https://flow.industries/en/iron/lifecycle), [Status](https://flow.industries/en/iron/status), [Check](https://flow.industries/en/iron/check), [Logs](https://flow.industries/en/iron/logs), [Login](https://flow.industries/en/iron/login)
+- [Getting started](https://docs.flow.industries/en/iron/getting-started) — install, init, first deploy
+- [Concepts](https://docs.flow.industries/en/iron/concepts) — fleet, servers, apps, sidecars, routing, watcher
+- [Configuration](https://docs.flow.industries/en/iron/configuration) — `fleet.toml` and `fleet.env.toml` reference
+- [Deploy pipeline](https://docs.flow.industries/en/iron/deploy) — what `flow deploy` does end-to-end
+- [Servers](https://docs.flow.industries/en/iron/servers), [Apps](https://docs.flow.industries/en/iron/apps), [Env](https://docs.flow.industries/en/iron/env), [Databases](https://docs.flow.industries/en/iron/databases), [Runners](https://docs.flow.industries/en/iron/runners)
+- [Lifecycle](https://docs.flow.industries/en/iron/lifecycle), [Status](https://docs.flow.industries/en/iron/status), [Check](https://docs.flow.industries/en/iron/check), [Logs](https://docs.flow.industries/en/iron/logs), [Login](https://docs.flow.industries/en/iron/login)
 
 ## License
 
