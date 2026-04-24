@@ -1,5 +1,6 @@
-# iron
+<img width="8100" height="2700" alt="ironlogo" src="https://github.com/user-attachments/assets/43ce267a-b902-4777-af5b-ccd8629cf072" />
 
+<br/>
 A fleet management CLI that deploys apps across your bare-metal servers with automatic HTTPS, DNS, and zero-downtime updates.
 
 ## Installation
