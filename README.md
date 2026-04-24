@@ -1,6 +1,6 @@
 # iron
 
-A CLI that deploys Docker Compose apps to bare-metal servers with automatic HTTPS, DNS, and zero-downtime updates.
+A fleet management CLI that deploys apps across your bare-metal servers with automatic HTTPS, DNS, and zero-downtime updates.
 
 ## Installation
 
