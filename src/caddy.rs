@@ -16,7 +16,7 @@ pub fn generate(app: &ResolvedApp) -> Option<String> {
     let mut out = String::new();
     for domain in &routing.domains {
         out.push_str(&format!(
-            "{domain} {{\n    reverse_proxy {name}:{port}{health_block}\n}}\n",
+            "{domain} {{\n    encode zstd gzip\n    reverse_proxy {name}:{port}{health_block}\n}}\n",
             domain = domain,
             name = app.name,
             port = port,

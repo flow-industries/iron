@@ -24,6 +24,7 @@ fn generate_caddy_fragment() {
     };
     let fragment = generate(&app).unwrap();
     assert!(fragment.contains("flow.industries {"));
+    assert!(fragment.contains("encode zstd gzip"));
     assert!(fragment.contains("reverse_proxy site:3000"));
     assert!(fragment.contains("health_uri /health"));
     assert!(fragment.contains("health_interval 5s"));
@@ -88,6 +89,7 @@ fn no_health_check_without_health_path() {
     };
     let fragment = generate(&app).unwrap();
     assert!(fragment.contains("server.flow.game {"));
+    assert!(fragment.contains("encode zstd gzip"));
     assert!(fragment.contains("reverse_proxy game-server:9999"));
     assert!(!fragment.contains("health_uri"));
     assert!(!fragment.contains("health_interval"));
