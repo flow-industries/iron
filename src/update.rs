@@ -28,10 +28,10 @@ pub async fn run(git: bool, git_url: Option<&str>) -> Result<()> {
 
     if use_git {
         let url = git_url.unwrap_or(DEFAULT_GIT_URL);
-        println!("Updating flow CLI from {url}...\n");
+        println!("Updating iron CLI from {url}...\n");
         command.args(["install", "--git", url]);
     } else {
-        println!("Updating flow CLI from crates.io...\n");
+        println!("Updating iron CLI from crates.io...\n");
         command.args(["install", CRATE_NAME]);
     }
 
@@ -44,6 +44,6 @@ pub async fn run(git: bool, git_url: Option<&str>) -> Result<()> {
         bail!("cargo install {CRATE_NAME} failed");
     }
 
-    ui::success("flow CLI updated");
+    ui::success("iron CLI updated");
     Ok(())
 }

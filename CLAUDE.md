@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Fleet Server Safety Rules
 
-**NEVER SSH into any fleet server directly without asking the user first.** Always confirm before running `ssh`, `scp`, or any command that opens a direct connection to a fleet server. Using the `flow` CLI (deploy, stop, restart, remove, status, check, logs) is fine — those are the intended interface.
+**NEVER SSH into any fleet server directly without asking the user first.** Always confirm before running `ssh`, `scp`, or any command that opens a direct connection to a fleet server. Using the `iron` CLI (deploy, stop, restart, remove, status, check, logs) is fine — those are the intended interface.
 
-**NEVER run state-changing commands directly on any fleet server unless the user explicitly asks for it.** No running `docker` commands, editing remote files, or executing arbitrary shell commands over SSH. All infrastructure changes must go through the `flow` CLI.
+**NEVER run state-changing commands directly on any fleet server unless the user explicitly asks for it.** No running `docker` commands, editing remote files, or executing arbitrary shell commands over SSH. All infrastructure changes must go through the `iron` CLI.
 
 ## What This Repo Is
 
-Infrastructure-as-code for the Flow ecosystem. The `flow` CLI (Rust) reads `fleet.toml` and generates Docker Compose files, Caddy reverse proxy fragments, and DNS records, then deploys via SSH. `flow server add` bootstraps new machines via Ansible (`setup.yml`). A built-in watcher container detects new GHCR images via `docker pull` + image ID comparison and triggers docker-rollout for zero-downtime deploys. This repo never contains Dockerfiles — service repos own those.
+Infrastructure-as-code for the Flow ecosystem. The `iron` CLI (Rust) reads `fleet.toml` and generates Docker Compose files, Caddy reverse proxy fragments, and DNS records, then deploys via SSH. `iron server add` bootstraps new machines via Ansible (`setup.yml`). A built-in watcher container detects new GHCR images via `docker pull` + image ID comparison and triggers docker-rollout for zero-downtime deploys. This repo never contains Dockerfiles — service repos own those.
 
 ## Commands
 
@@ -22,69 +22,69 @@ cargo build --release
 cargo test
 
 # Initialize a new fleet.toml
-flow init
+iron init
 
 # Deploy a single app
-flow deploy site
+iron deploy site
 
 # Deploy all apps
-flow deploy
+iron deploy
 
 # Fleet status and container info
-flow status
-flow status --server flow-1
+iron status
+iron status --server flow-1
 
 # Verify fleet.toml matches reality on servers
-flow check
-flow check --server flow-1
+iron check
+iron check --server flow-1
 
 # Stop an app (keeps config, files, and DNS intact)
-flow stop site
-flow stop site --server flow-1
+iron stop site
+iron stop site --server flow-1
 
 # Restart an app's containers without redeploying
-flow restart site
-flow restart site --server flow-1
+iron restart site
+iron restart site --server flow-1
 
 # Remove an app (stops containers, removes files, DNS, and fleet.toml entry)
-flow remove site
-flow remove site --yes
+iron remove site
+iron remove site --yes
 
 # Tail logs
-flow logs site
-flow logs site -f
-flow logs site --server flow-1
+iron logs site
+iron logs site -f
+iron logs site --server flow-1
 
-# App management (modifies fleet.toml only, run flow deploy afterward)
-flow app add site --image ghcr.io/org/site:latest --server flow-1 --port 3000 \
+# App management (modifies fleet.toml only, run iron deploy afterward)
+iron app add site --image ghcr.io/org/site:latest --server flow-1 --port 3000 \
     --domain flow.industries --health-path /health --health-interval 5s
-flow app add worker --image ghcr.io/org/worker:latest --server flow-1
-flow app add game --image ghcr.io/org/game:latest --server game-1 \
+iron app add worker --image ghcr.io/org/worker:latest --server flow-1
+iron app add game --image ghcr.io/org/game:latest --server game-1 \
     --deploy-strategy recreate --port-map 9999:9999/tcp
-flow app add-service auth postgres --image postgres:17 \
+iron app add-service auth postgres --image postgres:17 \
     --volume pgdata:/var/lib/postgresql/data --healthcheck "pg_isready -U flow"
-flow app add-service auth backup --image backup:latest --depends-on postgres
-flow app remove-service auth backup
+iron app add-service auth backup --image backup:latest --depends-on postgres
+iron app remove-service auth backup
 
 # Server management (creates DNS record, bootstraps via Ansible)
-flow server add fl-1 --ip 164.90.130.5
-flow server add fl-1 --ip 164.90.130.5 --host custom.flow.industries
-flow server add fl-1 --ip 164.90.130.5 --ssh-user ubuntu
-flow server remove fl-1
-flow server check
-flow server check fl-1
+iron server add fl-1 --ip 164.90.130.5
+iron server add fl-1 --ip 164.90.130.5 --host custom.flow.industries
+iron server add fl-1 --ip 164.90.130.5 --ssh-user ubuntu
+iron server remove fl-1
+iron server check
+iron server check fl-1
 
-# Runner management (modifies fleet.toml only, run flow deploy afterward)
-flow runner add ci --server fl-1 --scope org --target flow-industries --label linux
-flow runner add                    # interactive wizard
-flow runner remove ci
-flow runner remove ci --yes
-flow runner list                   # queries GitHub API for live status
+# Runner management (modifies fleet.toml only, run iron deploy afterward)
+iron runner add ci --server fl-1 --scope org --target flow-industries --label linux
+iron runner add                    # interactive wizard
+iron runner remove ci
+iron runner remove ci --yes
+iron runner list                   # queries GitHub API for live status
 
 # Login (set API tokens in fleet.env.toml)
-flow login         # Cloudflare + GitHub sequentially
-flow login cf      # Cloudflare API token only
-flow login gh      # GitHub token (GHCR + runner management)
+iron login         # Cloudflare + GitHub sequentially
+iron login cf      # Cloudflare API token only
+iron login gh      # GitHub token (GHCR + runner management)
 
 # Install Ansible dependencies (once)
 ansible-galaxy install -r ansible/requirements.yml
@@ -94,7 +94,7 @@ ansible-galaxy install -r ansible/requirements.yml
 
 **`fleet.toml` is the single source of truth for infrastructure** — servers, apps, runners, routing, sidecars, and port mappings. **`fleet.env.toml` (gitignored) is the single source of truth for all env vars** — both secrets and non-secret config like `NODE_ENV` or `POSTGRES_USER`. On deploy, env vars from `fleet.env.toml` are written to `.env` files.
 
-**`flow deploy <app>` pipeline:**
+**`iron deploy <app>` pipeline:**
 1. Parse `fleet.toml` + `fleet.env.toml`, merge env vars
 2. Generate `docker-compose.yml` (string templates, not serde serialization)
 3. Generate `.env` file with actual secret values
@@ -104,9 +104,9 @@ ansible-galaxy install -r ansible/requirements.yml
 
 **Docker networking:** All HTTP services and Caddy join a shared `flow` network. Caddy reaches services by Docker DNS name (e.g., `site:3000`). Game servers use direct TCP — no Caddy.
 
-**Caddy:** Base Caddyfile at `/opt/flow/caddy/Caddyfile` contains `import /etc/caddy/sites/*`. Per-app fragments are generated by `flow deploy` and placed in `/opt/flow/caddy/sites/`.
+**Caddy:** Base Caddyfile at `/opt/flow/caddy/Caddyfile` contains `import /etc/caddy/sites/*`. Per-app fragments are generated by `iron deploy` and placed in `/opt/flow/caddy/sites/`.
 
-**Watcher:** A simple Alpine container running `watch.sh` — polls every 30s, uses `docker pull` + image ID comparison to detect new GHCR images, then calls `docker rollout` (rolling) or `docker compose up -d --force-recreate` (recreate). Deployed automatically by `flow deploy`/`flow check` when GHCR apps exist.
+**Watcher:** A simple Alpine container running `watch.sh` — polls every 30s, uses `docker pull` + image ID comparison to detect new GHCR images, then calls `docker rollout` (rolling) or `docker compose up -d --force-recreate` (recreate). Deployed automatically by `iron deploy`/`iron check` when GHCR apps exist.
 
 ## Project Structure
 
