@@ -2,9 +2,10 @@ use anyhow::{Context, Result, bail};
 use std::path::Path;
 
 use crate::cli::ServerCommand;
-use crate::config::{EnvConfig, FleetConfig, FleetSecrets, Server};
+use crate::config::{EnvConfig, FleetConfig, FleetSecrets, Server, WebhookConfig};
 use crate::ssh::SshPool;
 use crate::ui;
+use crate::webhook;
 
 const CADDY_COMPOSE: &str = include_str!("../stacks/caddy/docker-compose.yml");
 
@@ -392,6 +393,8 @@ pub async fn deploy_infra(
     network: &str,
     secrets: &FleetSecrets,
     has_ghcr_apps: bool,
+    webhook: Option<&WebhookConfig>,
+    server_ip: Option<&str>,
 ) -> Result<()> {
     let sp = ui::spinner("Setting up infrastructure containers...");
 
@@ -457,6 +460,71 @@ pub async fn deploy_infra(
     } else {
         sp.finish_and_clear();
         ui::success("Caddy started");
+    }
+
+    if let Some(cfg) = webhook.filter(|w| w.server == server_name) {
+        let secret = secrets
+            .github_webhook_secret
+            .as_deref()
+            .filter(|s| !s.is_empty());
+        if let Some(secret) = secret {
+            let sp = ui::spinner("Setting up webhook receiver...");
+            pool.exec(server_name, "mkdir -p /opt/flow/webhook").await?;
+            let compose = webhook::generate_compose(
+                network,
+                secret,
+                secrets.discord_webhook_url.as_deref(),
+                secrets.telegram_bot_token.as_deref(),
+                secrets.telegram_chat_id.as_deref(),
+            );
+            pool.upload_file(
+                server_name,
+                "/opt/flow/webhook/docker-compose.yml",
+                &compose,
+            )
+            .await?;
+            pool.upload_file(
+                server_name,
+                "/opt/flow/webhook/webhook.py",
+                webhook::generate_script(),
+            )
+            .await?;
+            pool.exec(server_name, "cd /opt/flow/webhook && docker compose pull")
+                .await?;
+            pool.exec(server_name, "cd /opt/flow/webhook && docker compose up -d")
+                .await?;
+
+            let caddy_fragment = webhook::generate_caddy_fragment(&cfg.domain);
+            pool.upload_file(
+                server_name,
+                "/opt/flow/caddy/sites/webhook",
+                &caddy_fragment,
+            )
+            .await?;
+            pool.exec(
+                server_name,
+                "cd /opt/flow/caddy && docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile",
+            )
+            .await?;
+            sp.finish_and_clear();
+            ui::success(&format!("Webhook receiver started ({})", cfg.domain));
+
+            if let (Some(ip), Some(cf_token)) = (server_ip, secrets.cloudflare_api_token.as_deref())
+            {
+                let sp = ui::spinner(&format!("Ensuring DNS for {}...", cfg.domain));
+                if let Err(e) =
+                    crate::cloudflare::ensure_dns_record(cf_token, &cfg.domain, ip).await
+                {
+                    sp.finish_and_clear();
+                    ui::error(&format!("DNS for {}: {e}", cfg.domain));
+                } else {
+                    sp.finish_and_clear();
+                    ui::success(&format!("DNS {} → {ip}", cfg.domain));
+                }
+            }
+        } else {
+            ui::error("Webhook receiver skipped: set github_webhook_secret in fleet.env.toml");
+        }
     }
 
     Ok(())
@@ -585,7 +653,16 @@ async fn add(
         cloudflare_api_token: Some(cf_token.clone()),
         ..FleetSecrets::default()
     };
-    deploy_infra(&pool, name, &config.network, &add_secrets, false).await?;
+    deploy_infra(
+        &pool,
+        name,
+        &config.network,
+        &add_secrets,
+        false,
+        config.webhook.as_ref(),
+        Some(ip),
+    )
+    .await?;
     pool.close().await?;
 
     write_server_to_config(config_path, name, &hostname, ip, user, cli_ssh_key)?;

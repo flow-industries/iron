@@ -135,6 +135,49 @@ fn event_constructors() {
     let e = Event::check_issue("fl-1", &["container missing".to_string()]);
     assert!(matches!(e.level, EventLevel::Failure));
     assert!(e.description.contains("container missing"));
+
+    let e = Event::runner_deploy_started("ci", "fl-1");
+    assert!(matches!(e.level, EventLevel::Info));
+    assert!(e.title.contains("runner-ci"));
+    assert!(e.description.contains("fl-1"));
+
+    let e = Event::runner_deploy_completed("ci", "fl-1");
+    assert!(matches!(e.level, EventLevel::Success));
+    assert!(e.title.contains("runner-ci"));
+
+    let e = Event::runner_deploy_failed("ci", "fl-1", "ssh closed");
+    assert!(matches!(e.level, EventLevel::Failure));
+    assert!(e.description.contains("ssh closed"));
+
+    let e = Event::runner_removed("ci", "fl-1");
+    assert!(matches!(e.level, EventLevel::Info));
+    assert!(e.title.contains("runner-ci"));
+    assert!(e.description.contains("fl-1"));
+}
+
+#[test]
+fn runner_event_payloads_render() {
+    let started = Event::runner_deploy_started("ci", "fl-1");
+    let started_dc = discord_payload(&started);
+    assert_eq!(started_dc.embeds[0].color, embed_color(EventLevel::Info));
+    assert!(started_dc.embeds[0].title.contains("runner-ci"));
+
+    let completed = Event::runner_deploy_completed("ci", "fl-1");
+    let completed_dc = discord_payload(&completed);
+    assert_eq!(
+        completed_dc.embeds[0].color,
+        embed_color(EventLevel::Success)
+    );
+
+    let failed = Event::runner_deploy_failed("ci", "fl-1", "boom");
+    let failed_dc = discord_payload(&failed);
+    assert_eq!(failed_dc.embeds[0].color, embed_color(EventLevel::Failure));
+    assert!(failed_dc.embeds[0].description.contains("boom"));
+
+    let removed = Event::runner_removed("ci", "fl-1");
+    let removed_tg = telegram_payload("-100", &removed);
+    assert!(removed_tg.text.contains("runner-ci"));
+    assert!(removed_tg.text.contains("fl-1"));
 }
 
 #[test]

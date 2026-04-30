@@ -71,6 +71,38 @@ impl Event {
             description: issues.join("\n"),
         }
     }
+
+    pub fn runner_deploy_started(name: &str, server: &str) -> Self {
+        Self {
+            level: EventLevel::Info,
+            title: format!("Deploying runner-{name}"),
+            description: format!("runner-{name} on {server}"),
+        }
+    }
+
+    pub fn runner_deploy_completed(name: &str, server: &str) -> Self {
+        Self {
+            level: EventLevel::Success,
+            title: format!("Deploy complete: runner-{name}"),
+            description: format!("runner-{name} deployed to {server}"),
+        }
+    }
+
+    pub fn runner_deploy_failed(name: &str, server: &str, error: &str) -> Self {
+        Self {
+            level: EventLevel::Failure,
+            title: format!("Deploy failed: runner-{name}"),
+            description: format!("runner-{name} on {server}: {error}"),
+        }
+    }
+
+    pub fn runner_removed(name: &str, server: &str) -> Self {
+        Self {
+            level: EventLevel::Info,
+            title: format!("Removed: runner-{name}"),
+            description: format!("runner-{name} removed from {server}"),
+        }
+    }
 }
 
 pub struct Notifier {

@@ -16,6 +16,14 @@ pub struct FleetConfig {
     pub apps: HashMap<String, App>,
     #[serde(default)]
     pub runners: HashMap<String, Runner>,
+    pub webhook: Option<WebhookConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct WebhookConfig {
+    pub server: String,
+    pub domain: String,
 }
 
 fn default_network() -> String {
@@ -141,6 +149,7 @@ pub struct FleetSecrets {
     pub discord_webhook_url: Option<String>,
     pub telegram_bot_token: Option<String>,
     pub telegram_chat_id: Option<String>,
+    pub github_webhook_secret: Option<String>,
 }
 
 #[derive(Debug)]
@@ -151,6 +160,7 @@ pub struct Fleet {
     pub apps: HashMap<String, ResolvedApp>,
     pub runners: HashMap<String, Runner>,
     pub secrets: FleetSecrets,
+    pub webhook: Option<WebhookConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -314,6 +324,21 @@ fn validate(config: &FleetConfig) -> Result<()> {
         }
     }
 
+    if let Some(ref webhook) = config.webhook {
+        if !config.servers.contains_key(&webhook.server) {
+            bail!("[webhook] references unknown server '{}'", webhook.server);
+        }
+        if webhook.domain.is_empty() {
+            bail!("[webhook] has an empty domain");
+        }
+        if !webhook.domain.contains('.') {
+            bail!(
+                "[webhook] has invalid domain '{}' (expected hostname like webhooks.example.com)",
+                webhook.domain
+            );
+        }
+    }
+
     Ok(())
 }
 
@@ -402,5 +427,6 @@ pub fn load(config_path: &str) -> Result<Fleet> {
         apps: resolved_apps,
         runners: config.runners,
         secrets: env_config.fleet,
+        webhook: config.webhook,
     })
 }

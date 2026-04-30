@@ -9,10 +9,11 @@ use serde::Deserialize;
 
 use crate::cli::RunnerCommand;
 use crate::config::{FleetConfig, Runner, RunnerScope};
+use crate::notify::{Event, Notifier};
 use crate::ssh::SshPool;
 use crate::ui;
 
-pub async fn run(config_path: &str, command: RunnerCommand) -> Result<()> {
+pub async fn run(config_path: &str, command: RunnerCommand, notifier: &Notifier) -> Result<()> {
     match command {
         RunnerCommand::Add {
             name,
@@ -42,7 +43,7 @@ pub async fn run(config_path: &str, command: RunnerCommand) -> Result<()> {
                 )
             }
         }
-        RunnerCommand::Remove { name, yes } => remove(config_path, &name, yes).await,
+        RunnerCommand::Remove { name, yes } => remove(config_path, &name, yes, notifier).await,
         RunnerCommand::List => list(config_path).await,
     }
 }
@@ -164,7 +165,7 @@ fn add(
     Ok(())
 }
 
-async fn remove(config_path: &str, name: &str, yes: bool) -> Result<()> {
+async fn remove(config_path: &str, name: &str, yes: bool, notifier: &Notifier) -> Result<()> {
     let fleet = crate::config::load(config_path)?;
     let runner = fleet
         .runners
@@ -197,6 +198,7 @@ async fn remove(config_path: &str, name: &str, yes: bool) -> Result<()> {
     pool.close().await?;
 
     remove_runner_from_config(Path::new(config_path), name)?;
+    notifier.send(Event::runner_removed(name, &runner.server));
     ui::success(&format!("Runner '{name}' removed"));
     Ok(())
 }
@@ -300,6 +302,28 @@ struct GitHubRunner {
 #[derive(Deserialize)]
 struct GitHubRunnerLabel {
     name: String,
+}
+
+pub struct RunnerStatus {
+    pub name: String,
+    pub status: String,
+    pub busy: bool,
+}
+
+pub async fn fetch_runner_statuses(
+    client: &reqwest::Client,
+    token: &str,
+    runner: &Runner,
+) -> Result<Vec<RunnerStatus>> {
+    let runners = fetch_github_runners(client, token, runner).await?;
+    Ok(runners
+        .into_iter()
+        .map(|r| RunnerStatus {
+            name: r.name,
+            status: r.status,
+            busy: r.busy,
+        })
+        .collect())
 }
 
 async fn fetch_github_runners(

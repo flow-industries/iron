@@ -108,6 +108,8 @@ ansible-galaxy install -r ansible/requirements.yml
 
 **Watcher:** A simple Alpine container running `watch.sh` — polls every 30s, uses `docker pull` + image ID comparison to detect new GHCR images, then calls `docker rollout` (rolling) or `docker compose up -d --force-recreate` (recreate). Deployed automatically by `iron deploy`/`iron check` when GHCR apps exist.
 
+**Webhook receiver (optional):** A small `python:3-alpine` container running `webhook.py` (stdlib only) that accepts GitHub `workflow_job` webhooks at `https://<domain>/github`, validates the `X-Hub-Signature-256` HMAC against `github_webhook_secret`, filters to self-hosted-runner jobs only, and forwards Discord/Telegram notifications using the same payload shape as the Notifier. Enabled by adding a `[webhook]` table to `fleet.toml` (`server`, `domain`) and setting `github_webhook_secret` in `fleet.env.toml`. Deployed by `iron check` (and `iron server add` for the bootstrap server). Configure the matching webhook in GitHub repo/org settings: URL `https://<domain>/github`, content type `application/json`, secret matching `github_webhook_secret`, events `workflow_job`.
+
 ## Project Structure
 
 ```
@@ -130,6 +132,7 @@ src/
   app.rs        — app add, add-service, remove-service (toml_edit)
   server.rs     — server add/remove/check (Ansible + toml_edit)
   runner.rs     — runner add/remove/list, compose gen, GitHub API
+  webhook.rs    — github webhook receiver compose + python script generator
   status.rs     — fleet-wide status, container info, table display
   logs.rs       — tail logs from app
   ui.rs         — spinner, success/error/header, confirm prompt
@@ -143,6 +146,7 @@ tests/
   app.rs        — app management
   server.rs     — server management
   runner.rs     — runner config, compose gen, toml_edit
+  webhook.rs    — webhook compose + script HMAC validation
 ```
 
 ## Pre-push Checklist
@@ -165,7 +169,7 @@ cargo test
 
 ## Secrets
 
-`fleet.env.toml` (gitignored) holds all env vars — both secrets and non-secret config. `fleet.toml` contains no env vars. Fleet-level secrets: `gh_token` (GHCR image pulls + runner management), `gh_username` (GHCR org/username), `cloudflare_api_token` (DNS management). App-level secrets like `DB_PASSWORD` go under `[apps.<name>]`.
+`fleet.env.toml` (gitignored) holds all env vars — both secrets and non-secret config. `fleet.toml` contains no env vars. Fleet-level secrets: `gh_token` (GHCR image pulls + runner management), `gh_username` (GHCR org/username), `cloudflare_api_token` (DNS management), `github_webhook_secret` (HMAC for the optional webhook receiver — generate with `openssl rand -hex 32`). App-level secrets like `DB_PASSWORD` go under `[apps.<name>]`.
 
 ### Comments: ABSOLUTE RULE
 

@@ -66,7 +66,11 @@ async fn main() -> Result<()> {
             let notifier = iron::notify::Notifier::from_secrets(&fleet.secrets);
             iron::remove::run(&cli.config, &app, yes, &notifier).await
         }
-        Command::Runner { command } => iron::runner::run(&cli.config, command).await,
+        Command::Runner { command } => {
+            let fleet = iron::config::load(&cli.config)?;
+            let notifier = iron::notify::Notifier::from_secrets(&fleet.secrets);
+            iron::runner::run(&cli.config, command, &notifier).await
+        }
         Command::Init => iron::init::run(&cli.config).await,
         Command::Server { command } => iron::server::run(&cli.config, command).await,
         Command::App { command } => iron::app::run(&cli.config, command),
