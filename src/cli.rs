@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
-    name = "flow",
+    name = "iron",
     about = "Deploy and manage the Flow fleet",
     arg_required_else_help = true,
     disable_version_flag = true
@@ -149,7 +149,7 @@ pub enum Command {
         args: Vec<String>,
     },
 
-    /// Update flow CLI to the latest version
+    /// Update iron CLI to the latest version
     Update {
         /// Install from the git repository instead of crates.io
         #[arg(long)]
