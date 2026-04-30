@@ -234,13 +234,13 @@ fn generate_watcher_compose(
 ) -> String {
     let mut extra_env = String::new();
     if let Some(url) = discord_webhook_url {
-        extra_env.push_str(&format!("      DISCORD_WEBHOOK_URL: {url}\n"));
+        extra_env.push_str(&format!("      IRON_DISCORD_WEBHOOK_URL: {url}\n"));
     }
     if let Some(token) = telegram_bot_token {
-        extra_env.push_str(&format!("      TELEGRAM_BOT_TOKEN: {token}\n"));
+        extra_env.push_str(&format!("      IRON_TELEGRAM_BOT_TOKEN: {token}\n"));
     }
     if let Some(chat_id) = telegram_chat_id {
-        extra_env.push_str(&format!("      TELEGRAM_CHAT_ID: {chat_id}\n"));
+        extra_env.push_str(&format!("      IRON_TELEGRAM_CHAT_ID: {chat_id}\n"));
     }
     format!(
         r#"services:
@@ -290,29 +290,29 @@ notify() {
     *)       color=3447003 ;;
   esac
 
-  if [ -n "${DISCORD_WEBHOOK_URL:-}" ]; then
+  if [ -n "${IRON_DISCORD_WEBHOOK_URL:-}" ]; then
     payload=$(printf "{\"embeds\":[{\"title\":\"%s\",\"description\":\"%s\",\"color\":%d}]}" "$title" "$desc" "$color")
-    curl -s -X POST "$DISCORD_WEBHOOK_URL" \
+    curl -s -X POST "$IRON_DISCORD_WEBHOOK_URL" \
       -H "Content-Type: application/json" \
       -d "$payload" > /dev/null 2>&1 || true
   fi
 
-  if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+  if [ -n "${IRON_TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${IRON_TELEGRAM_CHAT_ID:-}" ]; then
     case "$level" in
       success) emoji="✅" ;;
       failure) emoji="❌" ;;
       *)       emoji="ℹ️" ;;
     esac
     text=$(printf "%s <b>%s</b>\n%s" "$emoji" "$title" "$desc")
-    tg_payload=$(printf "{\"chat_id\":\"%s\",\"text\":\"%s\",\"parse_mode\":\"HTML\"}" "$TELEGRAM_CHAT_ID" "$text")
-    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    tg_payload=$(printf "{\"chat_id\":\"%s\",\"text\":\"%s\",\"parse_mode\":\"HTML\"}" "$IRON_TELEGRAM_CHAT_ID" "$text")
+    curl -s -X POST "https://api.telegram.org/bot${IRON_TELEGRAM_BOT_TOKEN}/sendMessage" \
       -H "Content-Type: application/json" \
       -d "$tg_payload" > /dev/null 2>&1 || true
   fi
 }
 
 needs_curl=false
-if [ -n "${DISCORD_WEBHOOK_URL:-}" ] || [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+if [ -n "${IRON_DISCORD_WEBHOOK_URL:-}" ] || [ -n "${IRON_TELEGRAM_BOT_TOKEN:-}" ]; then
   needs_curl=true
 fi
 
