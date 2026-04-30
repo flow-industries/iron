@@ -273,7 +273,7 @@ fn generate_watcher_script() -> &'static str {
 set -u
 
 INTERVAL="${CHECK_INTERVAL:-30}"
-PULL_TIMEOUT="${PULL_TIMEOUT:-60}"
+PULL_TIMEOUT="${PULL_TIMEOUT:-300}"
 FMT="+%Y-%m-%dT%H:%M:%SZ"
 
 log() { echo "$(date -u "$FMT") $*"; }
@@ -345,9 +345,9 @@ while true; do
 
     local_id=$(docker inspect "$container" --format "{{.Image}}" 2>/dev/null) || continue
 
-    if ! timeout "$PULL_TIMEOUT" docker pull "$image" -q > /dev/null 2>&1; then
-      log "ERROR: pull failed or timed out (${PULL_TIMEOUT}s) for ${image}"
-      notify "failure" "Pull Failed: ${project}" "Failed to pull ${image}"
+    if ! pull_err=$(timeout "$PULL_TIMEOUT" docker pull "$image" -q 2>&1); then
+      log "ERROR: pull failed (${PULL_TIMEOUT}s timeout) for ${image}: ${pull_err}"
+      notify "failure" "Pull Failed: ${project}" "Failed to pull ${image}: ${pull_err}"
       continue
     fi
 
