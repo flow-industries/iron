@@ -270,12 +270,14 @@ fn generate_watcher_compose(
 fn generate_watcher_script() -> &'static str {
     // No single quotes allowed — upload_file heredoc escaping mangles them
     r#"#!/bin/sh
-set -eu
+set -u
 
 INTERVAL="${CHECK_INTERVAL:-30}"
+PULL_TIMEOUT="${PULL_TIMEOUT:-60}"
 FMT="+%Y-%m-%dT%H:%M:%SZ"
 
 log() { echo "$(date -u "$FMT") $*"; }
+heartbeat() { date +%s > /tmp/watcher-heartbeat 2>/dev/null || true; }
 
 notify() {
   local level="$1"
@@ -319,14 +321,21 @@ if [ "$needs_curl" = "true" ] && ! command -v curl > /dev/null 2>&1; then
 fi
 
 while true; do
+  heartbeat
+
   if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
     echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin > /dev/null 2>&1 \
       || log "WARN: GHCR login failed"
   fi
 
   containers=$(docker ps --filter "label=flow.watch=true" --format "{{.Names}}" 2>/dev/null)
+  count=0
+  for c in $containers; do count=$((count + 1)); done
+  log "Tick: ${count} container(s)"
 
   for container in $containers; do
+    heartbeat
+
     image=$(docker inspect "$container" --format "{{.Config.Image}}" 2>/dev/null) || continue
     strategy=$(docker inspect "$container" --format "{{index .Config.Labels \"flow.strategy\"}}" 2>/dev/null) || continue
     project=$(docker inspect "$container" --format "{{index .Config.Labels \"com.docker.compose.project\"}}" 2>/dev/null) || continue
@@ -336,8 +345,8 @@ while true; do
 
     local_id=$(docker inspect "$container" --format "{{.Image}}" 2>/dev/null) || continue
 
-    if ! docker pull "$image" -q > /dev/null 2>&1; then
-      log "ERROR: pull failed for ${image}"
+    if ! timeout "$PULL_TIMEOUT" docker pull "$image" -q > /dev/null 2>&1; then
+      log "ERROR: pull failed or timed out (${PULL_TIMEOUT}s) for ${image}"
       notify "failure" "Pull Failed: ${project}" "Failed to pull ${image}"
       continue
     fi
@@ -371,7 +380,7 @@ while true; do
     fi
   done
 
-  date +%s > /tmp/watcher-heartbeat
+  heartbeat
   sleep "$INTERVAL"
 done
 "#
@@ -431,6 +440,11 @@ pub async fn deploy_infra(
                 .await?;
             pool.exec(server_name, "cd /opt/flow/watcher && docker compose up -d")
                 .await?;
+            pool.exec(
+                server_name,
+                "cd /opt/flow/watcher && docker compose restart watcher",
+            )
+            .await?;
             sp.finish_and_clear();
             ui::success("Caddy + watcher started");
         } else {
