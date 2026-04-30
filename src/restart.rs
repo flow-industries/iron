@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 
+use crate::compose;
 use crate::config::Fleet;
 use crate::notify::{Event, Notifier};
 use crate::ssh::SshPool;
@@ -36,13 +37,30 @@ pub async fn run(
     let pool = SshPool::connect(&servers_to_connect).await?;
     sp.finish_and_clear();
 
+    let compose_yaml = compose::generate(app, &fleet.network);
+    let env_content = compose::generate_env(app);
     let app_dir = format!("/opt/flow/{}", app.name);
+    let compose_path = format!("{app_dir}/docker-compose.yml");
+    let env_path = format!("{app_dir}/.env");
 
     for server_name in &target_servers {
+        let sp = ui::spinner(&format!("{server_name} → syncing config for {app_name}..."));
+        pool.exec(server_name, &format!("mkdir -p {app_dir}"))
+            .await?;
+        pool.upload_file(server_name, &compose_path, &compose_yaml)
+            .await?;
+        if !env_content.trim().is_empty() {
+            pool.upload_file(server_name, &env_path, &env_content)
+                .await?;
+            pool.exec(server_name, &format!("chmod 600 {env_path}"))
+                .await?;
+        }
+        sp.finish_and_clear();
+
         let sp = ui::spinner(&format!("{server_name} → restarting {app_name}..."));
         pool.exec(
             server_name,
-            &format!("cd {app_dir} && docker compose restart"),
+            &format!("cd {app_dir} && docker compose up -d --force-recreate"),
         )
         .await?;
         sp.finish_and_clear();
