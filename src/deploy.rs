@@ -141,7 +141,7 @@ async fn deploy_app(
                     };
 
                     for domain in &routing.domains {
-                        cloudflare::ensure_dns_record(cf_token, domain, &server_ip).await?;
+                        cloudflare::ensure_dns_record(cf_token, domain, &server_ip, true).await?;
                     }
                 }
                 sp.finish_and_clear();

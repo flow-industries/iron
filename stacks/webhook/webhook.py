@@ -119,9 +119,10 @@ def handle_workflow_job(payload):
                 f"Job {conclusion}: {head}",
                 f"on runner-{runner_name}",
             )
+        final = conclusion or "finished"
         return (
             "info",
-            f"Job {conclusion or 'finished'}: {head}",
+            f"Job {final}: {head}",
             f"on runner-{runner_name}",
         )
     return None

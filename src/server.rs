@@ -269,7 +269,6 @@ fn generate_watcher_compose(
 }
 
 fn generate_watcher_script() -> &'static str {
-    // No single quotes allowed — upload_file heredoc escaping mangles them
     r#"#!/bin/sh
 set -u
 
@@ -493,6 +492,11 @@ pub async fn deploy_infra(
                 .await?;
             pool.exec(server_name, "cd /opt/flow/webhook && docker compose up -d")
                 .await?;
+            pool.exec(
+                server_name,
+                "cd /opt/flow/webhook && docker compose restart webhook",
+            )
+            .await?;
 
             let caddy_fragment = webhook::generate_caddy_fragment(&cfg.domain);
             pool.upload_file(
@@ -513,7 +517,7 @@ pub async fn deploy_infra(
             {
                 let sp = ui::spinner(&format!("Ensuring DNS for {}...", cfg.domain));
                 if let Err(e) =
-                    crate::cloudflare::ensure_dns_record(cf_token, &cfg.domain, ip).await
+                    crate::cloudflare::ensure_dns_record(cf_token, &cfg.domain, ip, false).await
                 {
                     sp.finish_and_clear();
                     ui::error(&format!("DNS for {}: {e}", cfg.domain));
@@ -603,7 +607,7 @@ async fn add(
     })?;
 
     let sp = ui::spinner(&format!("Creating DNS record {hostname} → {ip}..."));
-    crate::cloudflare::ensure_dns_record(&cf_token, &hostname, ip).await?;
+    crate::cloudflare::ensure_dns_record(&cf_token, &hostname, ip, true).await?;
     sp.finish_and_clear();
     ui::success(&format!("{hostname} → {ip}"));
 

@@ -25,6 +25,8 @@ struct Zone {
 pub struct DnsRecord {
     pub id: String,
     pub content: String,
+    #[serde(default)]
+    pub proxied: bool,
 }
 
 #[derive(Serialize)]
@@ -40,6 +42,7 @@ struct CreateRecord {
 #[derive(Serialize)]
 struct UpdateRecord {
     content: String,
+    proxied: bool,
 }
 
 pub async fn verify_token(api_token: &str) -> Result<()> {
@@ -59,7 +62,12 @@ pub async fn verify_token(api_token: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn ensure_dns_record(api_token: &str, hostname: &str, ip: &str) -> Result<()> {
+pub async fn ensure_dns_record(
+    api_token: &str,
+    hostname: &str,
+    ip: &str,
+    proxied: bool,
+) -> Result<()> {
     let client = reqwest::Client::new();
 
     let zone_name = extract_zone(hostname);
@@ -71,7 +79,7 @@ pub async fn ensure_dns_record(api_token: &str, hostname: &str, ip: &str) -> Res
     let existing = get_record(&client, api_token, &zone_id, hostname).await?;
 
     match existing {
-        Some(record) if record.content == ip => {}
+        Some(record) if record.content == ip && record.proxied == proxied => {}
         Some(record) => {
             let url = format!("{}/zones/{}/dns_records/{}", CF_API, zone_id, record.id);
             let resp: CfResponse<serde_json::Value> = client
@@ -79,6 +87,7 @@ pub async fn ensure_dns_record(api_token: &str, hostname: &str, ip: &str) -> Res
                 .bearer_auth(api_token)
                 .json(&UpdateRecord {
                     content: ip.to_string(),
+                    proxied,
                 })
                 .send()
                 .await?
@@ -100,7 +109,7 @@ pub async fn ensure_dns_record(api_token: &str, hostname: &str, ip: &str) -> Res
                     content: ip.to_string(),
                     // Cloudflare auto TTL
                     ttl: 1,
-                    proxied: true,
+                    proxied,
                 })
                 .send()
                 .await?
