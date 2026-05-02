@@ -83,8 +83,7 @@ impl SshPool {
 
     pub async fn upload_file(&self, server: &str, remote_path: &str, content: &str) -> Result<()> {
         let session = self.get(server)?;
-        let escaped = content.replace('\'', "'\\''");
-        let cmd = format!("cat > {remote_path} <<'FLOW_EOF'\n{escaped}\nFLOW_EOF");
+        let cmd = build_upload_cmd(remote_path, content);
         let output = session
             .command("sh")
             .arg("-c")
@@ -110,4 +109,8 @@ impl SshPool {
         }
         Ok(())
     }
+}
+
+pub fn build_upload_cmd(remote_path: &str, content: &str) -> String {
+    format!("cat > {remote_path} <<'FLOW_EOF'\n{content}\nFLOW_EOF")
 }

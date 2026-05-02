@@ -102,7 +102,7 @@ async fn check_server(
 ) -> Result<Vec<String>> {
     let mut issues = Vec::new();
     issues.extend(check_containers(pool, server, apps).await?);
-    issues.extend(check_caddy(pool, server, apps).await?);
+    issues.extend(check_caddy(pool, server, apps, fleet).await?);
     issues.extend(check_stale(pool, server, apps, fleet).await?);
 
     let has_ghcr_apps = apps.iter().any(|a| a.image.starts_with("ghcr.io/"));
@@ -174,12 +174,21 @@ async fn check_containers(
     Ok(issues)
 }
 
-async fn check_caddy(pool: &SshPool, server: &str, apps: &[&ResolvedApp]) -> Result<Vec<String>> {
-    let expected: HashSet<&str> = apps
+async fn check_caddy(
+    pool: &SshPool,
+    server: &str,
+    apps: &[&ResolvedApp],
+    fleet: &Fleet,
+) -> Result<Vec<String>> {
+    let mut expected: HashSet<&str> = apps
         .iter()
         .filter(|a| a.routing.is_some())
         .map(|a| a.name.as_str())
         .collect();
+
+    if fleet.webhook.as_ref().is_some_and(|w| w.server == server) {
+        expected.insert("webhook");
+    }
 
     let output = pool
         .exec(server, "ls -1 /opt/flow/caddy/sites/ 2>/dev/null")

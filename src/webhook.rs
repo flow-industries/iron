@@ -41,7 +41,7 @@ pub fn generate_compose(
       - {network}
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8080/health\").read()' >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
