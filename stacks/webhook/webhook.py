@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -37,14 +38,18 @@ def post_json(url, payload, timeout=10):
     req = urllib.request.Request(
         url,
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "iron-webhook/1.0 (+https://github.com/flow-industries/iron)",
+        },
         method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             resp.read()
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as e:
-        log(f"notify failed: {e}")
+        host = urllib.parse.urlsplit(url).netloc or url
+        log(f"notify failed: {host}: {e}")
 
 
 def notify(level, title, description):
