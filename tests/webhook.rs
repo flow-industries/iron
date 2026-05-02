@@ -3,9 +3,12 @@
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process::{Child, Command, Stdio};
+use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use iron::webhook;
+
+static SERVER_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn compose_includes_secret_and_image() {
@@ -86,6 +89,7 @@ fn script_is_valid_python_syntax() {
 struct Server {
     child: Child,
     port: u16,
+    _guard: MutexGuard<'static, ()>,
 }
 
 impl Drop for Server {
@@ -113,12 +117,14 @@ fn pick_port() -> u16 {
 }
 
 fn start_server(secret: &str) -> Server {
+    let guard = SERVER_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
     let script = webhook::generate_script();
     let path = std::env::temp_dir().join(format!("iron-webhook-{}.py", std::process::id()));
     std::fs::write(&path, script).unwrap();
 
     let port = pick_port();
-    let child = Command::new("python3")
+    let mut child = Command::new("python3")
         .arg(&path)
         .env("GITHUB_WEBHOOK_SECRET", secret)
         .env("BIND", format!("127.0.0.1:{port}"))
@@ -132,11 +138,19 @@ fn start_server(secret: &str) -> Server {
 
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline {
+        if let Ok(Some(_status)) = child.try_wait() {
+            panic!("webhook server exited before binding port {port}");
+        }
         if TcpStream::connect(("127.0.0.1", port)).is_ok() {
-            return Server { child, port };
+            return Server {
+                child,
+                port,
+                _guard: guard,
+            };
         }
         std::thread::sleep(Duration::from_millis(50));
     }
+    let _ = child.kill();
     panic!("webhook server failed to start on port {port}");
 }
 
