@@ -19,6 +19,7 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>, notifier: &Notifier
     }
 
     let apps_by_server = build_server_app_map(fleet, &filtered);
+    let http = reqwest::Client::new();
 
     let sp = ui::spinner("Connecting...");
     let pool = SshPool::connect(&filtered).await?;
@@ -39,6 +40,8 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>, notifier: &Notifier
             &fleet.network,
             &fleet.secrets,
             has_ghcr_apps,
+            fleet.webhook.as_ref(),
+            server.ip.as_deref(),
         )
         .await
         {
@@ -50,7 +53,7 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>, notifier: &Notifier
             .cloned()
             .unwrap_or_default();
 
-        match check_server(&pool, server_name, &apps, fleet).await {
+        match check_server(&pool, server_name, &apps, fleet, &http).await {
             Ok(issues) if !issues.is_empty() => {
                 notifier.send(Event::check_issue(server_name, &issues));
             }
@@ -61,7 +64,7 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>, notifier: &Notifier
         }
     }
 
-    check_dns(fleet, &filtered).await;
+    check_dns(fleet, &filtered, &http).await;
 
     let _ = pool.close().await;
     Ok(())
@@ -95,6 +98,7 @@ async fn check_server(
     server: &str,
     apps: &[&ResolvedApp],
     fleet: &Fleet,
+    http: &reqwest::Client,
 ) -> Result<Vec<String>> {
     let mut issues = Vec::new();
     issues.extend(check_containers(pool, server, apps).await?);
@@ -104,6 +108,24 @@ async fn check_server(
     let has_ghcr_apps = apps.iter().any(|a| a.image.starts_with("ghcr.io/"));
     if has_ghcr_apps {
         issues.extend(check_watcher(pool, server).await?);
+    }
+
+    if let Some(token) = fleet.secrets.gh_token.as_deref() {
+        issues.extend(check_runners(http, token, fleet, server).await);
+    }
+
+    if fleet.webhook.as_ref().is_some_and(|w| w.server == server) {
+        issues.extend(check_webhook(pool, server).await?);
+        if let (Some(secret), Some(token)) = (
+            fleet
+                .secrets
+                .github_webhook_secret
+                .as_deref()
+                .filter(|s| !s.is_empty()),
+            fleet.secrets.gh_token.as_deref().filter(|s| !s.is_empty()),
+        ) {
+            issues.extend(crate::webhook::ensure_github_webhooks(http, token, fleet, secret).await);
+        }
     }
 
     Ok(issues)
@@ -213,7 +235,7 @@ async fn check_stale(
 
     let on_disk: Vec<&str> = output
         .lines()
-        .filter(|l| !l.is_empty() && *l != "caddy" && *l != "watcher")
+        .filter(|l| !l.is_empty() && *l != "caddy" && *l != "watcher" && *l != "webhook")
         .collect();
 
     let mut issues = Vec::new();
@@ -276,7 +298,95 @@ async fn check_watcher(pool: &SshPool, server: &str) -> Result<Vec<String>> {
     Ok(issues)
 }
 
-async fn check_dns(fleet: &Fleet, filtered: &HashMap<String, Server>) {
+async fn check_webhook(pool: &SshPool, server: &str) -> Result<Vec<String>> {
+    let output = pool
+        .exec(
+            server,
+            "docker ps --filter 'name=webhook-webhook-' --format '{{.Names}}\t{{.Status}}'",
+        )
+        .await
+        .unwrap_or_default();
+
+    let mut issues = Vec::new();
+    println!();
+    let entry = output.lines().find(|l| !l.is_empty());
+    if let Some(line) = entry {
+        let status = line.split_once('\t').map_or(line, |(_, s)| s);
+        if status.contains("healthy") && !status.contains("unhealthy") {
+            ui::success("webhook running (healthy)");
+        } else if status.contains("unhealthy") {
+            let msg = "webhook running (unhealthy)".to_string();
+            ui::error(&msg);
+            issues.push(msg);
+        } else if status.starts_with("Up") {
+            ui::success("webhook running");
+        } else {
+            let msg = format!("webhook not running ({status})");
+            ui::error(&msg);
+            issues.push(msg);
+        }
+    } else {
+        let msg = "webhook missing".to_string();
+        ui::error(&msg);
+        issues.push(msg);
+    }
+
+    Ok(issues)
+}
+
+async fn check_runners(
+    http: &reqwest::Client,
+    token: &str,
+    fleet: &Fleet,
+    server: &str,
+) -> Vec<String> {
+    let runners_here: Vec<(&String, &crate::config::Runner)> = fleet
+        .runners
+        .iter()
+        .filter(|(_, r)| r.server == server)
+        .collect();
+
+    if runners_here.is_empty() {
+        return Vec::new();
+    }
+
+    println!();
+    let mut issues = Vec::new();
+
+    for (name, runner) in runners_here {
+        match crate::runner::fetch_runner_statuses(http, token, runner).await {
+            Ok(statuses) => match statuses.iter().find(|s| s.name == *name) {
+                Some(s) if s.status == "online" => {
+                    let label = if s.busy {
+                        format!("runner-{name} online (busy)")
+                    } else {
+                        format!("runner-{name} online")
+                    };
+                    ui::success(&label);
+                }
+                Some(s) => {
+                    let msg = format!("runner-{name} {}", s.status);
+                    ui::error(&msg);
+                    issues.push(msg);
+                }
+                None => {
+                    let msg = format!("runner-{name} not registered with github");
+                    ui::error(&msg);
+                    issues.push(msg);
+                }
+            },
+            Err(e) => {
+                let msg = format!("runner-{name} status check failed: {e}");
+                ui::error(&msg);
+                issues.push(msg);
+            }
+        }
+    }
+
+    issues
+}
+
+async fn check_dns(fleet: &Fleet, filtered: &HashMap<String, Server>, client: &reqwest::Client) {
     let cf_token = match fleet.secrets.cloudflare_api_token {
         Some(ref t) if !t.is_empty() => t,
         _ => return,
@@ -316,7 +426,6 @@ async fn check_dns(fleet: &Fleet, filtered: &HashMap<String, Server>) {
 
     ui::header("DNS");
 
-    let client = reqwest::Client::new();
     let mut zone_cache: HashMap<String, Option<String>> = HashMap::new();
 
     for (hostname, valid_ips) in &dns_entries {
@@ -325,7 +434,7 @@ async fn check_dns(fleet: &Fleet, filtered: &HashMap<String, Server>) {
         let zone_id = if let Some(cached) = zone_cache.get(&zone_name) {
             cached.clone()
         } else {
-            let id = crate::cloudflare::get_zone_id(&client, cf_token, &zone_name)
+            let id = crate::cloudflare::get_zone_id(client, cf_token, &zone_name)
                 .await
                 .ok();
             zone_cache.insert(zone_name.clone(), id.clone());
@@ -337,7 +446,7 @@ async fn check_dns(fleet: &Fleet, filtered: &HashMap<String, Server>) {
             continue;
         };
 
-        match crate::cloudflare::get_record(&client, cf_token, &zone_id, hostname).await {
+        match crate::cloudflare::get_record(client, cf_token, &zone_id, hostname).await {
             Ok(Some(record)) if valid_ips.contains(record.content.as_str()) => {
                 ui::success(&format!("{hostname} → {}", record.content));
             }

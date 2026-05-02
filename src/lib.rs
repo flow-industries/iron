@@ -25,3 +25,4 @@ pub mod stop;
 pub mod ui;
 pub mod update;
 pub mod version;
+pub mod webhook;

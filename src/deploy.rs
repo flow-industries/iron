@@ -77,7 +77,7 @@ pub async fn run(
     }
 
     for (name, r) in &runners {
-        deploy_runner(fleet, name, r, &pool).await?;
+        deploy_runner(fleet, name, r, &pool, notifier).await?;
     }
 
     pool.close().await?;
@@ -242,7 +242,13 @@ async fn deploy_app_to_server(
     Ok(())
 }
 
-async fn deploy_runner(fleet: &Fleet, name: &str, r: &Runner, pool: &SshPool) -> Result<()> {
+async fn deploy_runner(
+    fleet: &Fleet,
+    name: &str,
+    r: &Runner,
+    pool: &SshPool,
+    notifier: &Notifier,
+) -> Result<()> {
     let gh_token = fleet
         .secrets
         .gh_token
@@ -252,6 +258,21 @@ async fn deploy_runner(fleet: &Fleet, name: &str, r: &Runner, pool: &SshPool) ->
     println!();
     ui::header(&format!("Deploying runner-{name}"));
 
+    notifier.send(Event::runner_deploy_started(name, &r.server));
+
+    let result = deploy_runner_inner(name, r, pool, gh_token).await;
+
+    if let Err(ref e) = result {
+        notifier.send(Event::runner_deploy_failed(name, &r.server, &e.to_string()));
+        result?;
+    }
+
+    notifier.send(Event::runner_deploy_completed(name, &r.server));
+    ui::success(&format!("  {} → runner-{}", r.server, name));
+    Ok(())
+}
+
+async fn deploy_runner_inner(name: &str, r: &Runner, pool: &SshPool, gh_token: &str) -> Result<()> {
     let compose_yaml = runner::generate_compose(name, r);
     let env_content = runner::generate_env(gh_token);
     let runner_dir = format!("/opt/flow/runner-{name}");
@@ -287,6 +308,5 @@ async fn deploy_runner(fleet: &Fleet, name: &str, r: &Runner, pool: &SshPool) ->
     .await?;
     sp.finish_and_clear();
 
-    ui::success(&format!("  {} → runner-{}", r.server, name));
     Ok(())
 }

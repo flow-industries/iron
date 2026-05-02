@@ -27,3 +27,7 @@ vault_password
 fleet.toml
 fleet.env.toml
 fleet.old.toml
+
+# Python
+__pycache__/
+*.pyc
