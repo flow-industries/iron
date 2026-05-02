@@ -48,6 +48,24 @@ fn caddy_fragment_proxies_to_webhook_service() {
 }
 
 #[test]
+fn org_hooks_url() {
+    use iron::config::RunnerScope;
+    assert_eq!(
+        webhook::hooks_base_url(&RunnerScope::Org, "flow-industries"),
+        "https://api.github.com/orgs/flow-industries/hooks"
+    );
+}
+
+#[test]
+fn repo_hooks_url() {
+    use iron::config::RunnerScope;
+    assert_eq!(
+        webhook::hooks_base_url(&RunnerScope::Repo, "flow-industries/iron"),
+        "https://api.github.com/repos/flow-industries/iron/hooks"
+    );
+}
+
+#[test]
 fn script_is_valid_python_syntax() {
     if which("python3").is_none() {
         eprintln!("skipping: python3 not on PATH");

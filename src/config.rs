@@ -114,7 +114,7 @@ pub struct Runner {
     pub ephemeral: bool,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum RunnerScope {
     Org,

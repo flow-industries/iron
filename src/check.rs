@@ -116,6 +116,16 @@ async fn check_server(
 
     if fleet.webhook.as_ref().is_some_and(|w| w.server == server) {
         issues.extend(check_webhook(pool, server).await?);
+        if let (Some(secret), Some(token)) = (
+            fleet
+                .secrets
+                .github_webhook_secret
+                .as_deref()
+                .filter(|s| !s.is_empty()),
+            fleet.secrets.gh_token.as_deref().filter(|s| !s.is_empty()),
+        ) {
+            issues.extend(crate::webhook::ensure_github_webhooks(http, token, fleet, secret).await);
+        }
     }
 
     Ok(issues)
