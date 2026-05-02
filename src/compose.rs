@@ -7,12 +7,8 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
     out.push_str(&format!("    image: {}\n", app.image));
 
     if !app.env.is_empty() {
-        out.push_str("    environment:\n");
-        let mut keys: Vec<_> = app.env.keys().collect();
-        keys.sort();
-        for key in keys {
-            out.push_str(&format!("      {key}: ${{{key}}}\n"));
-        }
+        out.push_str("    env_file:\n");
+        out.push_str("      - .env\n");
     }
 
     out.push_str("    restart: always\n");
@@ -81,12 +77,8 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
         out.push_str("      - \"flow.watch=false\"\n");
 
         if !svc.env.is_empty() {
-            out.push_str("    environment:\n");
-            let mut keys: Vec<_> = svc.env.keys().collect();
-            keys.sort();
-            for key in keys {
-                out.push_str(&format!("      {key}: ${{{key}}}\n"));
-            }
+            out.push_str("    env_file:\n");
+            out.push_str("      - .env\n");
         }
 
         if !svc.volumes.is_empty() {

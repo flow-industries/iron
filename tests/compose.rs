@@ -143,3 +143,45 @@ fn generate_env_file() {
     assert!(env.contains("NODE_ENV=production"));
     assert!(env.contains("POSTGRES_USER=flow"));
 }
+
+// Regression: env vars must be loaded via env_file so that shell variables
+// in the calling process (notably HOSTNAME inside the watcher container) cannot
+// shadow values from .env via ${VAR} interpolation.
+#[test]
+fn compose_uses_env_file_not_shell_interpolation() {
+    let app = ResolvedApp {
+        name: "paper".to_string(),
+        image: "ghcr.io/flow-industries/paper:latest".to_string(),
+        servers: vec!["fl-1".to_string()],
+        port: Some(3000),
+        deploy_strategy: DeployStrategy::Rolling,
+        routing: Some(Routing {
+            domains: vec!["paper.flow.industries".to_string()],
+            health_path: Some("/health".to_string()),
+            health_interval: None,
+        }),
+        env: [
+            ("HOSTNAME".into(), "0.0.0.0".into()),
+            (
+                "NEXT_PUBLIC_SITE_URL".into(),
+                "https://paper.flow.industries".into(),
+            ),
+        ]
+        .into(),
+        services: vec![ResolvedSidecar {
+            name: "postgres".to_string(),
+            image: "postgres:17".to_string(),
+            volumes: vec![],
+            env: [("POSTGRES_USER".into(), "flow".into())].into(),
+            healthcheck: None,
+            depends_on: None,
+        }],
+        ports: vec![],
+    };
+    let output = generate(&app, "flow");
+    assert!(output.contains("env_file:\n      - .env"));
+    assert!(!output.contains("${HOSTNAME}"));
+    assert!(!output.contains("${NEXT_PUBLIC_SITE_URL}"));
+    assert!(!output.contains("${POSTGRES_USER}"));
+    assert!(!output.contains("environment:"));
+}
