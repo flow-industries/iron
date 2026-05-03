@@ -15,6 +15,7 @@ pub mod init;
 pub mod login;
 pub mod logs;
 pub mod notify;
+pub mod r2;
 pub mod remove;
 pub mod restart;
 pub mod runner;

@@ -764,3 +764,133 @@ image = "postgres:16"
             .contains("duplicate service name")
     );
 }
+
+#[test]
+fn parse_app_with_r2_buckets() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.auth]
+image = "auth:latest"
+servers = ["flow-1"]
+port = 3000
+
+[[apps.auth.r2_buckets]]
+name = "flow-media"
+public_domain = "media.flow.industries"
+
+[[apps.auth.r2_buckets]]
+name = "flow-backups"
+"#;
+    let config: FleetConfig = toml::from_str(toml_str).unwrap();
+    let buckets = &config.apps["auth"].r2_buckets;
+    assert_eq!(buckets.len(), 2);
+    assert_eq!(buckets[0].name, "flow-media");
+    assert_eq!(
+        buckets[0].public_domain,
+        Some("media.flow.industries".to_string())
+    );
+    assert_eq!(buckets[1].name, "flow-backups");
+    assert_eq!(buckets[1].public_domain, None);
+}
+
+#[test]
+fn r2_buckets_default_empty() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.web]
+image = "nginx:latest"
+servers = ["flow-1"]
+port = 80
+"#;
+    let config: FleetConfig = toml::from_str(toml_str).unwrap();
+    assert!(config.apps["web"].r2_buckets.is_empty());
+}
+
+#[test]
+fn validate_r2_bucket_invalid_name() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.auth]
+image = "auth:latest"
+servers = ["flow-1"]
+port = 3000
+
+[[apps.auth.r2_buckets]]
+name = "Bad_Name"
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid R2 bucket name")
+    );
+}
+
+#[test]
+fn validate_r2_bucket_duplicate() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.auth]
+image = "auth:latest"
+servers = ["flow-1"]
+port = 3000
+
+[[apps.auth.r2_buckets]]
+name = "flow-media"
+
+[[apps.auth.r2_buckets]]
+name = "flow-media"
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("duplicate R2 bucket name")
+    );
+}
+
+#[test]
+fn validate_r2_bucket_invalid_public_domain() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.auth]
+image = "auth:latest"
+servers = ["flow-1"]
+port = 3000
+
+[[apps.auth.r2_buckets]]
+name = "flow-media"
+public_domain = "https://media.flow.industries"
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid public_domain")
+    );
+}

@@ -18,6 +18,7 @@ fn simple_app() -> ResolvedApp {
         env: std::collections::HashMap::new(),
         services: vec![],
         ports: vec![],
+        r2_buckets: vec![],
     }
 }
 
@@ -57,6 +58,7 @@ fn generate_with_ports() {
             external: 9999,
             protocol: "tcp".to_string(),
         }],
+        r2_buckets: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("\"9999:9999\""));
@@ -96,6 +98,7 @@ fn generate_with_sidecars() {
             },
         ],
         ports: vec![],
+        r2_buckets: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("postgres:"));
@@ -137,6 +140,7 @@ fn generate_env_file() {
             depends_on: None,
         }],
         ports: vec![],
+        r2_buckets: vec![],
     };
     let env = generate_env(&app);
     assert!(env.contains("DB_PASSWORD=secret123"));
@@ -177,6 +181,7 @@ fn compose_uses_env_file_not_shell_interpolation() {
             depends_on: None,
         }],
         ports: vec![],
+        r2_buckets: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("env_file:\n      - .env"));

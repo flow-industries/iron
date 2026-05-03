@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
         Command::Deploy { app, force } => {
             let fleet = iron::config::load(&cli.config)?;
             let notifier = iron::notify::Notifier::from_secrets(&fleet.secrets);
-            iron::deploy::run(&fleet, app.as_deref(), force, &notifier).await
+            iron::deploy::run(&cli.config, &fleet, app.as_deref(), force, &notifier).await
         }
         Command::Status {
             server,

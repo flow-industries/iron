@@ -1,15 +1,19 @@
-use anyhow::{Result, bail};
+use std::path::Path;
+
+use anyhow::{Context, Result, bail};
 
 use crate::caddy;
 use crate::cloudflare;
 use crate::compose;
 use crate::config::{DeployStrategy, Fleet, ResolvedApp, Runner};
 use crate::notify::{Event, Notifier};
+use crate::r2;
 use crate::runner;
 use crate::ssh::SshPool;
 use crate::ui;
 
 pub async fn run(
+    config_path: &str,
     fleet: &Fleet,
     app_filter: Option<&str>,
     force: bool,
@@ -73,7 +77,7 @@ pub async fn run(
     }
 
     for app in &apps {
-        deploy_app(fleet, app, &pool, force, notifier).await?;
+        deploy_app(config_path, fleet, app, &pool, force, notifier).await?;
     }
 
     for (name, r) in &runners {
@@ -86,6 +90,7 @@ pub async fn run(
 }
 
 async fn deploy_app(
+    config_path: &str,
     fleet: &Fleet,
     app: &ResolvedApp,
     pool: &SshPool,
@@ -98,6 +103,10 @@ async fn deploy_app(
 
     println!();
     ui::header(&format!("Deploying {}", app.name));
+
+    let mut app = app.clone();
+    ensure_r2(config_path, fleet, &mut app).await?;
+    let app = &app;
 
     let compose_yaml = compose::generate(app, &fleet.network);
     let env_content = compose::generate_env(app);
@@ -308,5 +317,110 @@ async fn deploy_runner_inner(name: &str, r: &Runner, pool: &SshPool, gh_token: &
     .await?;
     sp.finish_and_clear();
 
+    Ok(())
+}
+
+async fn ensure_r2(config_path: &str, fleet: &Fleet, app: &mut ResolvedApp) -> Result<()> {
+    if app.r2_buckets.is_empty() {
+        return Ok(());
+    }
+
+    let token =
+        fleet.secrets.cloudflare_api_token.as_deref().context(
+            "r2_buckets configured but cloudflare_api_token missing — run `iron login cf`",
+        )?;
+    let account_id =
+        fleet.secrets.cloudflare_account_id.as_deref().context(
+            "r2_buckets configured but cloudflare_account_id missing — run `iron login cf`",
+        )?;
+
+    let sp = ui::spinner("  Ensuring R2 buckets...");
+    for bucket in app.r2_buckets.clone() {
+        r2::ensure_bucket(token, account_id, &bucket.name).await?;
+        let public_url = if let Some(ref domain) = bucket.public_domain {
+            r2::attach_custom_domain(token, account_id, &bucket.name, domain).await?;
+            let target = r2::custom_domain_cname_target(&bucket.name, account_id);
+            cloudflare::ensure_cname_record(token, domain, &target, true).await?;
+            format!("https://{domain}")
+        } else {
+            format!("{}/{}", r2::s3_endpoint(account_id), bucket.name)
+        };
+        let key = bucket.name.to_uppercase().replace('-', "_");
+        app.env
+            .insert(format!("R2_BUCKET_{key}"), bucket.name.clone());
+        app.env.insert(format!("R2_PUBLIC_URL_{key}"), public_url);
+    }
+    sp.finish_and_clear();
+    ui::success("  R2 buckets ensured");
+
+    if !app.env.contains_key("R2_ACCESS_KEY_ID") {
+        let sp = ui::spinner("  Minting R2 API token...");
+        let bucket_names: Vec<&str> = app.r2_buckets.iter().map(|b| b.name.as_str()).collect();
+        let creds = r2::mint_app_token(token, account_id, &app.name, &bucket_names).await?;
+        save_app_env_secret(
+            config_path,
+            &app.name,
+            "R2_ACCESS_KEY_TOKEN_ID",
+            &creds.token_id,
+        )?;
+        save_app_env_secret(
+            config_path,
+            &app.name,
+            "R2_ACCESS_KEY_ID",
+            &creds.access_key_id,
+        )?;
+        save_app_env_secret(
+            config_path,
+            &app.name,
+            "R2_SECRET_ACCESS_KEY",
+            &creds.secret_access_key,
+        )?;
+        app.env
+            .insert("R2_ACCESS_KEY_TOKEN_ID".to_string(), creds.token_id);
+        app.env
+            .insert("R2_ACCESS_KEY_ID".to_string(), creds.access_key_id);
+        app.env
+            .insert("R2_SECRET_ACCESS_KEY".to_string(), creds.secret_access_key);
+        sp.finish_and_clear();
+        ui::success("  R2 API token minted and saved to fleet.env.toml");
+    }
+
+    app.env
+        .insert("R2_ENDPOINT".to_string(), r2::s3_endpoint(account_id));
+    app.env
+        .insert("R2_ACCOUNT_ID".to_string(), account_id.to_string());
+
+    Ok(())
+}
+
+fn save_app_env_secret(config_path: &str, app_name: &str, key: &str, value: &str) -> Result<()> {
+    let env_path = Path::new(config_path).with_file_name("fleet.env.toml");
+
+    let mut doc = if env_path.exists() {
+        let content = std::fs::read_to_string(&env_path)
+            .with_context(|| format!("Failed to read {}", env_path.display()))?;
+        content
+            .parse::<toml_edit::DocumentMut>()
+            .with_context(|| format!("Failed to parse {}", env_path.display()))?
+    } else {
+        toml_edit::DocumentMut::new()
+    };
+
+    let apps = doc
+        .entry("apps")
+        .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()))
+        .as_table_mut()
+        .context("[apps] is not a table in fleet.env.toml")?;
+
+    let app_table = apps
+        .entry(app_name)
+        .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()))
+        .as_table_mut()
+        .with_context(|| format!("[apps.{app_name}] is not a table in fleet.env.toml"))?;
+
+    app_table.insert(key, toml_edit::value(value));
+
+    std::fs::write(&env_path, doc.to_string())
+        .with_context(|| format!("Failed to write {}", env_path.display()))?;
     Ok(())
 }
