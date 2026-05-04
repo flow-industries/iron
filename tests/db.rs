@@ -14,6 +14,7 @@ fn make_app(services: Vec<ResolvedSidecar>) -> ResolvedApp {
         services,
         ports: vec![],
         r2_buckets: vec![],
+        volumes: vec![],
     }
 }
 

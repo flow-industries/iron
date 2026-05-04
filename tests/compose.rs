@@ -19,6 +19,7 @@ fn simple_app() -> ResolvedApp {
         services: vec![],
         ports: vec![],
         r2_buckets: vec![],
+        volumes: vec![],
     }
 }
 
@@ -59,6 +60,7 @@ fn generate_with_ports() {
             protocol: "tcp".to_string(),
         }],
         r2_buckets: vec![],
+        volumes: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("\"9999:9999\""));
@@ -99,6 +101,7 @@ fn generate_with_sidecars() {
         ],
         ports: vec![],
         r2_buckets: vec![],
+        volumes: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("postgres:"));
@@ -141,11 +144,47 @@ fn generate_env_file() {
         }],
         ports: vec![],
         r2_buckets: vec![],
+        volumes: vec![],
     };
     let env = generate_env(&app);
     assert!(env.contains("DB_PASSWORD=secret123"));
     assert!(env.contains("NODE_ENV=production"));
     assert!(env.contains("POSTGRES_USER=flow"));
+}
+
+#[test]
+fn generate_with_primary_volumes() {
+    let app = ResolvedApp {
+        name: "pds".to_string(),
+        image: "ghcr.io/bluesky-social/pds:latest".to_string(),
+        servers: vec!["fl-1".to_string()],
+        port: Some(3000),
+        deploy_strategy: DeployStrategy::Rolling,
+        routing: Some(Routing {
+            domains: vec!["pds.flow.talk".to_string()],
+            health_path: Some("/xrpc/_health".to_string()),
+            health_interval: None,
+        }),
+        env: std::collections::HashMap::new(),
+        services: vec![ResolvedSidecar {
+            name: "postgres".to_string(),
+            image: "postgres:17".to_string(),
+            volumes: vec!["pdspg:/var/lib/postgresql/data".to_string()],
+            env: std::collections::HashMap::new(),
+            healthcheck: Some("pg_isready".to_string()),
+            depends_on: None,
+        }],
+        ports: vec![],
+        r2_buckets: vec![],
+        volumes: vec!["pdsdata:/pds".to_string()],
+    };
+    let output = generate(&app, "flow");
+    let pds_section = output.split("\n  postgres:").next().unwrap();
+    assert!(pds_section.contains("    volumes:"));
+    assert!(pds_section.contains("- pdsdata:/pds"));
+    assert!(output.contains("\nvolumes:\n"));
+    assert!(output.contains("  pdsdata:"));
+    assert!(output.contains("  pdspg:"));
 }
 
 // Regression: env vars must be loaded via env_file so that shell variables
@@ -182,6 +221,7 @@ fn compose_uses_env_file_not_shell_interpolation() {
         }],
         ports: vec![],
         r2_buckets: vec![],
+        volumes: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("env_file:\n      - .env"));

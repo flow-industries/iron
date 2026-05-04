@@ -11,6 +11,13 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
         out.push_str("      - .env\n");
     }
 
+    if !app.volumes.is_empty() {
+        out.push_str("    volumes:\n");
+        for vol in &app.volumes {
+            out.push_str(&format!("      - {vol}\n"));
+        }
+    }
+
     out.push_str("    restart: always\n");
 
     if !app.ports.is_empty() {
@@ -125,13 +132,15 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
     }
 
     let mut named_volumes: Vec<String> = Vec::new();
-    for svc in &app.services {
-        for vol in &svc.volumes {
-            if let Some(name) = vol.split(':').next() {
-                let is_named_volume = !name.contains('/') && !name.starts_with('.');
-                if is_named_volume && !named_volumes.contains(&name.to_string()) {
-                    named_volumes.push(name.to_string());
-                }
+    let all_volume_specs = app
+        .volumes
+        .iter()
+        .chain(app.services.iter().flat_map(|s| s.volumes.iter()));
+    for vol in all_volume_specs {
+        if let Some(name) = vol.split(':').next() {
+            let is_named_volume = !name.contains('/') && !name.starts_with('.');
+            if is_named_volume && !named_volumes.contains(&name.to_string()) {
+                named_volumes.push(name.to_string());
             }
         }
     }

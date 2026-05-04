@@ -348,7 +348,20 @@ async fn ensure_r2(config_path: &str, fleet: &Fleet, app: &mut ResolvedApp) -> R
         let key = bucket.name.to_uppercase().replace('-', "_");
         app.env
             .insert(format!("R2_BUCKET_{key}"), bucket.name.clone());
-        app.env.insert(format!("R2_PUBLIC_URL_{key}"), public_url);
+        app.env
+            .insert(format!("R2_PUBLIC_URL_{key}"), public_url.clone());
+
+        if let Some(ref prefix) = bucket.env_prefix {
+            app.env
+                .insert(format!("{prefix}_BUCKET"), bucket.name.clone());
+            app.env
+                .insert(format!("{prefix}_ENDPOINT"), r2::s3_endpoint(account_id));
+            app.env
+                .insert(format!("{prefix}_REGION"), "auto".to_string());
+            app.env
+                .insert(format!("{prefix}_FORCE_PATH_STYLE"), "true".to_string());
+            app.env.insert(format!("{prefix}_PUBLIC_URL"), public_url);
+        }
     }
     sp.finish_and_clear();
     ui::success("  R2 buckets ensured");
@@ -389,6 +402,21 @@ async fn ensure_r2(config_path: &str, fleet: &Fleet, app: &mut ResolvedApp) -> R
         .insert("R2_ENDPOINT".to_string(), r2::s3_endpoint(account_id));
     app.env
         .insert("R2_ACCOUNT_ID".to_string(), account_id.to_string());
+
+    let access_key_id = app.env.get("R2_ACCESS_KEY_ID").cloned();
+    let secret_access_key = app.env.get("R2_SECRET_ACCESS_KEY").cloned();
+    for bucket in &app.r2_buckets {
+        if let Some(ref prefix) = bucket.env_prefix {
+            if let Some(ref akid) = access_key_id {
+                app.env
+                    .insert(format!("{prefix}_ACCESS_KEY_ID"), akid.clone());
+            }
+            if let Some(ref sk) = secret_access_key {
+                app.env
+                    .insert(format!("{prefix}_SECRET_ACCESS_KEY"), sk.clone());
+            }
+        }
+    }
 
     Ok(())
 }

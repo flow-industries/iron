@@ -61,6 +61,8 @@ pub struct App {
     pub ports: Vec<PortMapping>,
     #[serde(default)]
     pub r2_buckets: Vec<R2Bucket>,
+    #[serde(default)]
+    pub volumes: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -68,6 +70,7 @@ pub struct App {
 pub struct R2Bucket {
     pub name: String,
     pub public_domain: Option<String>,
+    pub env_prefix: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default, PartialEq)]
@@ -185,6 +188,7 @@ pub struct ResolvedApp {
     pub services: Vec<ResolvedSidecar>,
     pub ports: Vec<PortMapping>,
     pub r2_buckets: Vec<R2Bucket>,
+    pub volumes: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -208,6 +212,22 @@ fn is_valid_r2_bucket_name(s: &str) -> bool {
     }
     s.chars()
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+fn is_valid_env_prefix(s: &str) -> bool {
+    let len = s.len();
+    if !(1..=64).contains(&len) {
+        return false;
+    }
+    let bytes = s.as_bytes();
+    if !bytes[0].is_ascii_uppercase() {
+        return false;
+    }
+    if bytes[len - 1] == b'_' {
+        return false;
+    }
+    s.chars()
+        .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
 }
 
 fn is_valid_caddy_duration(s: &str) -> bool {
@@ -335,6 +355,30 @@ fn validate(config: &FleetConfig) -> Result<()> {
                         "App '{app_name}' R2 bucket '{}' has public_domain '{domain}' with no dot",
                         bucket.name
                     );
+                }
+            }
+            if let Some(ref prefix) = bucket.env_prefix {
+                if !is_valid_env_prefix(prefix) {
+                    bail!(
+                        "App '{app_name}' R2 bucket '{}' has invalid env_prefix '{prefix}' (uppercase letters/digits/underscores, must start with a letter, must not end with underscore, 1-64 chars)",
+                        bucket.name
+                    );
+                }
+            }
+        }
+
+        let mut seen_volume_names: HashSet<&str> = HashSet::new();
+        for vol in &app.volumes {
+            if vol.is_empty() {
+                bail!("App '{app_name}' has an empty volume entry");
+            }
+            if vol.contains(char::is_whitespace) {
+                bail!("App '{app_name}' has volume '{vol}' containing whitespace");
+            }
+            if let Some(name) = vol.split(':').next() {
+                let is_named_volume = !name.contains('/') && !name.starts_with('.');
+                if is_named_volume && !seen_volume_names.insert(name) {
+                    bail!("App '{app_name}' has duplicate volume name '{name}'");
                 }
             }
         }
@@ -480,6 +524,7 @@ pub fn load(config_path: &str) -> Result<Fleet> {
                 services: resolved_services,
                 ports: app.ports,
                 r2_buckets: app.r2_buckets,
+                volumes: app.volumes,
             },
         );
     }

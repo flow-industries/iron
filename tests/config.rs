@@ -894,3 +894,149 @@ public_domain = "https://media.flow.industries"
             .contains("invalid public_domain")
     );
 }
+
+#[test]
+fn parse_r2_bucket_env_prefix() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.pds]
+image = "ghcr.io/bluesky-social/pds:latest"
+servers = ["flow-1"]
+port = 3000
+
+[[apps.pds.r2_buckets]]
+name = "flow-pds-blobs"
+env_prefix = "PDS_BLOBSTORE_S3"
+"#;
+    let config: FleetConfig = toml::from_str(toml_str).unwrap();
+    let bucket = &config.apps["pds"].r2_buckets[0];
+    assert_eq!(bucket.name, "flow-pds-blobs");
+    assert_eq!(bucket.env_prefix.as_deref(), Some("PDS_BLOBSTORE_S3"));
+}
+
+#[test]
+fn validate_r2_bucket_invalid_env_prefix() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.pds]
+image = "pds:latest"
+servers = ["flow-1"]
+port = 3000
+
+[[apps.pds.r2_buckets]]
+name = "flow-pds-blobs"
+env_prefix = "lowercase_bad"
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid env_prefix")
+    );
+}
+
+#[test]
+fn validate_r2_bucket_env_prefix_trailing_underscore() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.pds]
+image = "pds:latest"
+servers = ["flow-1"]
+port = 3000
+
+[[apps.pds.r2_buckets]]
+name = "flow-pds-blobs"
+env_prefix = "PDS_"
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid env_prefix")
+    );
+}
+
+#[test]
+fn parse_app_volumes() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.pds]
+image = "ghcr.io/bluesky-social/pds:latest"
+servers = ["flow-1"]
+port = 3000
+volumes = ["pdsdata:/pds"]
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let fleet = load(path.to_str().unwrap()).unwrap();
+    assert_eq!(fleet.apps["pds"].volumes, vec!["pdsdata:/pds".to_string()]);
+}
+
+#[test]
+fn validate_app_volumes_duplicate_named() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.pds]
+image = "pds:latest"
+servers = ["flow-1"]
+port = 3000
+volumes = ["data:/a", "data:/b"]
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("duplicate volume name")
+    );
+}
+
+#[test]
+fn validate_app_volumes_empty_entry() {
+    let toml_str = r#"
+[servers.flow-1]
+host = "flow-1.example.com"
+
+[apps.pds]
+image = "pds:latest"
+servers = ["flow-1"]
+port = 3000
+volumes = [""]
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fleet.toml");
+    std::fs::write(&path, toml_str).unwrap();
+    let result = load(path.to_str().unwrap());
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("empty volume entry")
+    );
+}
