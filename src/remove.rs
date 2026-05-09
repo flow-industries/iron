@@ -123,7 +123,9 @@ pub async fn run(
     remove_app_from_config(config, app_name)?;
     remove_app_from_env_config(config, app_name)?;
 
-    notifier.send(Event::app_removed(app_name, &app.servers));
+    notifier
+        .send(Event::app_removed(app_name, &app.servers))
+        .await;
     ui::success(&format!("{app_name} fully removed"));
     Ok(())
 }

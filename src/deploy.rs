@@ -113,7 +113,9 @@ async fn deploy_app(
     let caddy_fragment = caddy::generate(app);
 
     for server_name in &app.servers {
-        notifier.send(Event::deploy_started(&app.name, server_name));
+        notifier
+            .send(Event::deploy_started(&app.name, server_name))
+            .await;
 
         let result = deploy_app_to_server(
             app,
@@ -127,11 +129,15 @@ async fn deploy_app(
         .await;
 
         if let Err(ref e) = result {
-            notifier.send(Event::deploy_failed(&app.name, server_name, &e.to_string()));
+            notifier
+                .send(Event::deploy_failed(&app.name, server_name, &e.to_string()))
+                .await;
             result?;
         }
 
-        notifier.send(Event::deploy_completed(&app.name, server_name));
+        notifier
+            .send(Event::deploy_completed(&app.name, server_name))
+            .await;
     }
 
     if let Some(ref routing) = app.routing {
@@ -267,16 +273,22 @@ async fn deploy_runner(
     println!();
     ui::header(&format!("Deploying runner-{name}"));
 
-    notifier.send(Event::runner_deploy_started(name, &r.server));
+    notifier
+        .send(Event::runner_deploy_started(name, &r.server))
+        .await;
 
     let result = deploy_runner_inner(name, r, pool, gh_token).await;
 
     if let Err(ref e) = result {
-        notifier.send(Event::runner_deploy_failed(name, &r.server, &e.to_string()));
+        notifier
+            .send(Event::runner_deploy_failed(name, &r.server, &e.to_string()))
+            .await;
         result?;
     }
 
-    notifier.send(Event::runner_deploy_completed(name, &r.server));
+    notifier
+        .send(Event::runner_deploy_completed(name, &r.server))
+        .await;
     ui::success(&format!("  {} → runner-{}", r.server, name));
     Ok(())
 }

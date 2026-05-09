@@ -65,7 +65,9 @@ pub async fn run(
         .await?;
         sp.finish_and_clear();
         ui::success(&format!("{server_name} → {app_name} restarted"));
-        notifier.send(Event::app_restarted(app_name, server_name));
+        notifier
+            .send(Event::app_restarted(app_name, server_name))
+            .await;
     }
 
     pool.close().await?;

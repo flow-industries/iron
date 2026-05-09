@@ -44,7 +44,9 @@ pub async fn run(
             .await?;
         sp.finish_and_clear();
         ui::success(&format!("{server_name} → {app_name} stopped"));
-        notifier.send(Event::app_stopped(app_name, server_name));
+        notifier
+            .send(Event::app_stopped(app_name, server_name))
+            .await;
     }
 
     pool.close().await?;

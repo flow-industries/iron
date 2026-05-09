@@ -55,7 +55,9 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>, notifier: &Notifier
 
         match check_server(&pool, server_name, &apps, fleet, &http).await {
             Ok(issues) if !issues.is_empty() => {
-                notifier.send(Event::check_issue(server_name, &issues));
+                notifier
+                    .send(Event::check_issue(server_name, &issues))
+                    .await;
             }
             Err(e) => {
                 ui::error(&format!("SSH error: {e}"));

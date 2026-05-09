@@ -198,7 +198,9 @@ async fn remove(config_path: &str, name: &str, yes: bool, notifier: &Notifier) -
     pool.close().await?;
 
     remove_runner_from_config(Path::new(config_path), name)?;
-    notifier.send(Event::runner_removed(name, &runner.server));
+    notifier
+        .send(Event::runner_removed(name, &runner.server))
+        .await;
     ui::success(&format!("Runner '{name}' removed"));
     Ok(())
 }
