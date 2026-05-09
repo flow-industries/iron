@@ -9,233 +9,228 @@ pub enum EventLevel {
     Info,
 }
 
+impl EventLevel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Success => "success",
+            Self::Failure => "failure",
+            Self::Info => "info",
+        }
+    }
+
+    pub fn discord_color(self) -> u32 {
+        match self {
+            Self::Success => 0x002e_cc71,
+            Self::Failure => 0x00e7_4c3c,
+            Self::Info => 0x0034_98db,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Event {
     pub level: EventLevel,
-    pub title: String,
-    pub description: String,
+    pub source: &'static str,
+    pub app: String,
+    pub action: String,
+    pub server: String,
+    pub msg: String,
 }
 
 impl Event {
     pub fn deploy_started(app: &str, server: &str) -> Self {
         Self {
             level: EventLevel::Info,
-            title: format!("Deploying {app}"),
-            description: format!("{app} on {server}"),
+            source: "iron",
+            app: app.into(),
+            action: "Deploying".into(),
+            server: server.into(),
+            msg: String::new(),
         }
     }
 
     pub fn deploy_completed(app: &str, server: &str) -> Self {
         Self {
             level: EventLevel::Success,
-            title: format!("Deploy complete: {app}"),
-            description: format!("{app} deployed to {server}"),
+            source: "iron",
+            app: app.into(),
+            action: "Deploy complete".into(),
+            server: server.into(),
+            msg: String::new(),
         }
     }
 
     pub fn deploy_failed(app: &str, server: &str, error: &str) -> Self {
         Self {
             level: EventLevel::Failure,
-            title: format!("Deploy failed: {app}"),
-            description: format!("{app} on {server}: {error}"),
+            source: "iron",
+            app: app.into(),
+            action: "Deploy failed".into(),
+            server: server.into(),
+            msg: error.into(),
         }
     }
 
     pub fn app_stopped(app: &str, server: &str) -> Self {
         Self {
             level: EventLevel::Info,
-            title: format!("Stopped: {app}"),
-            description: format!("{app} stopped on {server}"),
+            source: "iron",
+            app: app.into(),
+            action: "Stopped".into(),
+            server: server.into(),
+            msg: String::new(),
         }
     }
 
     pub fn app_restarted(app: &str, server: &str) -> Self {
         Self {
             level: EventLevel::Info,
-            title: format!("Restarted: {app}"),
-            description: format!("{app} restarted on {server}"),
+            source: "iron",
+            app: app.into(),
+            action: "Restarted".into(),
+            server: server.into(),
+            msg: String::new(),
         }
     }
 
     pub fn app_removed(app: &str, servers: &[String]) -> Self {
         Self {
             level: EventLevel::Info,
-            title: format!("Removed: {app}"),
-            description: format!("{app} removed from {}", servers.join(", ")),
+            source: "iron",
+            app: app.into(),
+            action: "Removed".into(),
+            server: servers.join(", "),
+            msg: String::new(),
         }
     }
 
     pub fn check_issue(server: &str, issues: &[String]) -> Self {
         Self {
             level: EventLevel::Failure,
-            title: format!("Issues on {server}"),
-            description: issues.join("\n"),
+            source: "iron",
+            app: "infra".into(),
+            action: "Issues detected".into(),
+            server: server.into(),
+            msg: issues.join("\n"),
         }
     }
 
     pub fn runner_deploy_started(name: &str, server: &str) -> Self {
         Self {
             level: EventLevel::Info,
-            title: format!("Deploying runner-{name}"),
-            description: format!("runner-{name} on {server}"),
+            source: "iron",
+            app: format!("runner-{name}"),
+            action: "Deploying".into(),
+            server: server.into(),
+            msg: String::new(),
         }
     }
 
     pub fn runner_deploy_completed(name: &str, server: &str) -> Self {
         Self {
             level: EventLevel::Success,
-            title: format!("Deploy complete: runner-{name}"),
-            description: format!("runner-{name} deployed to {server}"),
+            source: "iron",
+            app: format!("runner-{name}"),
+            action: "Deploy complete".into(),
+            server: server.into(),
+            msg: String::new(),
         }
     }
 
     pub fn runner_deploy_failed(name: &str, server: &str, error: &str) -> Self {
         Self {
             level: EventLevel::Failure,
-            title: format!("Deploy failed: runner-{name}"),
-            description: format!("runner-{name} on {server}: {error}"),
+            source: "iron",
+            app: format!("runner-{name}"),
+            action: "Deploy failed".into(),
+            server: server.into(),
+            msg: error.into(),
         }
     }
 
     pub fn runner_removed(name: &str, server: &str) -> Self {
         Self {
             level: EventLevel::Info,
-            title: format!("Removed: runner-{name}"),
-            description: format!("runner-{name} removed from {server}"),
+            source: "iron",
+            app: format!("runner-{name}"),
+            action: "Removed".into(),
+            server: server.into(),
+            msg: String::new(),
         }
     }
 }
 
 pub struct Notifier {
-    discord_webhook_url: Option<String>,
-    telegram_bot_token: Option<String>,
-    telegram_chat_id: Option<String>,
+    url: Option<String>,
+    user: Option<String>,
+    password: Option<String>,
 }
 
 impl Notifier {
     pub fn from_secrets(secrets: &FleetSecrets) -> Self {
+        let strip_empty = |s: &Option<String>| s.as_ref().filter(|s| !s.is_empty()).cloned();
         Self {
-            discord_webhook_url: secrets
-                .discord_webhook_url
-                .as_ref()
-                .filter(|s| !s.is_empty())
-                .cloned(),
-            telegram_bot_token: secrets
-                .telegram_bot_token
-                .as_ref()
-                .filter(|s| !s.is_empty())
-                .cloned(),
-            telegram_chat_id: secrets
-                .telegram_chat_id
-                .as_ref()
-                .filter(|s| !s.is_empty())
-                .cloned(),
+            url: strip_empty(&secrets.tail_url),
+            user: strip_empty(&secrets.tail_user),
+            password: strip_empty(&secrets.tail_password),
         }
     }
 
     pub fn send(&self, event: Event) {
-        let has_discord = self.discord_webhook_url.is_some();
-        let has_telegram = self.telegram_bot_token.is_some() && self.telegram_chat_id.is_some();
-
-        if !has_discord && !has_telegram {
+        let Some(url) = self.url.clone() else {
             return;
-        }
-
-        let discord_url = self.discord_webhook_url.clone();
-        let tg_token = self.telegram_bot_token.clone();
-        let tg_chat = self.telegram_chat_id.clone();
+        };
+        let user = self.user.clone();
+        let password = self.password.clone();
 
         tokio::spawn(async move {
-            let client = reqwest::Client::new();
-
-            if let Some(url) = discord_url {
-                let _ = send_discord(&client, &url, &event).await;
-            }
-
-            if let (Some(token), Some(chat_id)) = (tg_token, tg_chat) {
-                let _ = send_telegram(&client, &token, &chat_id, &event).await;
-            }
+            let _ = post_event(&url, user.as_deref(), password.as_deref(), &event).await;
         });
     }
 }
 
 #[derive(Serialize)]
-pub struct DiscordEmbed {
-    pub title: String,
-    pub description: String,
+pub struct WirePayload<'a> {
+    pub level: &'static str,
+    pub source: &'static str,
+    pub app: &'a str,
+    pub action: &'a str,
+    pub server: &'a str,
+    pub msg: &'a str,
     pub color: u32,
 }
 
-#[derive(Serialize)]
-pub struct DiscordPayload {
-    pub embeds: Vec<DiscordEmbed>,
-}
-
-#[derive(Serialize)]
-pub struct TelegramPayload {
-    pub chat_id: String,
-    pub text: String,
-    pub parse_mode: String,
-}
-
-pub fn embed_color(level: EventLevel) -> u32 {
-    match level {
-        EventLevel::Success => 0x002e_cc71,
-        EventLevel::Failure => 0x00e7_4c3c,
-        EventLevel::Info => 0x0034_98db,
+pub fn wire_payload(event: &Event) -> WirePayload<'_> {
+    WirePayload {
+        level: event.level.as_str(),
+        source: event.source,
+        app: &event.app,
+        action: &event.action,
+        server: &event.server,
+        msg: &event.msg,
+        color: event.level.discord_color(),
     }
 }
 
-pub fn discord_payload(event: &Event) -> DiscordPayload {
-    DiscordPayload {
-        embeds: vec![DiscordEmbed {
-            title: event.title.clone(),
-            description: event.description.clone(),
-            color: embed_color(event.level),
-        }],
-    }
+pub fn ingest_endpoint(base_url: &str) -> String {
+    format!(
+        "{}/api/default/flow_events/_json",
+        base_url.trim_end_matches('/')
+    )
 }
 
-pub fn telegram_text(event: &Event) -> String {
-    let emoji = match event.level {
-        EventLevel::Success => "\u{2705}",
-        EventLevel::Failure => "\u{274c}",
-        EventLevel::Info => "\u{2139}\u{fe0f}",
-    };
-    format!("{} <b>{}</b>\n{}", emoji, event.title, event.description)
-}
-
-pub fn telegram_payload(chat_id: &str, event: &Event) -> TelegramPayload {
-    TelegramPayload {
-        chat_id: chat_id.to_string(),
-        text: telegram_text(event),
-        parse_mode: "HTML".to_string(),
-    }
-}
-
-async fn send_discord(
-    client: &reqwest::Client,
+async fn post_event(
     url: &str,
+    user: Option<&str>,
+    password: Option<&str>,
     event: &Event,
 ) -> Result<(), reqwest::Error> {
-    client
-        .post(url)
-        .json(&discord_payload(event))
-        .send()
-        .await?;
-    Ok(())
-}
-
-async fn send_telegram(
-    client: &reqwest::Client,
-    token: &str,
-    chat_id: &str,
-    event: &Event,
-) -> Result<(), reqwest::Error> {
-    let url = format!("https://api.telegram.org/bot{token}/sendMessage");
-    client
-        .post(&url)
-        .json(&telegram_payload(chat_id, event))
-        .send()
-        .await?;
+    let client = reqwest::Client::new();
+    let body = vec![wire_payload(event)];
+    let mut req = client.post(ingest_endpoint(url)).json(&body);
+    if let (Some(u), Some(p)) = (user, password) {
+        req = req.basic_auth(u, Some(p));
+    }
+    req.send().await?;
     Ok(())
 }
