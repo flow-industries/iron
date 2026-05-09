@@ -176,16 +176,11 @@ impl Notifier {
         }
     }
 
-    pub fn send(&self, event: Event) {
-        let Some(url) = self.url.clone() else {
+    pub async fn send(&self, event: Event) {
+        let Some(url) = self.url.as_deref() else {
             return;
         };
-        let user = self.user.clone();
-        let password = self.password.clone();
-
-        tokio::spawn(async move {
-            let _ = post_event(&url, user.as_deref(), password.as_deref(), &event).await;
-        });
+        let _ = post_event(url, self.user.as_deref(), self.password.as_deref(), &event).await;
     }
 }
 

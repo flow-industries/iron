@@ -3,15 +3,15 @@
 use iron::config::FleetSecrets;
 use iron::notify::*;
 
-#[test]
-fn notifier_disabled_when_no_secrets() {
+#[tokio::test]
+async fn notifier_disabled_when_no_secrets() {
     let secrets = FleetSecrets::default();
     let notifier = Notifier::from_secrets(&secrets);
-    notifier.send(Event::deploy_started("web", "fl-1"));
+    notifier.send(Event::deploy_started("web", "fl-1")).await;
 }
 
-#[test]
-fn notifier_ignores_empty_strings() {
+#[tokio::test]
+async fn notifier_ignores_empty_strings() {
     let secrets = FleetSecrets {
         tail_url: Some(String::new()),
         tail_user: Some(String::new()),
@@ -19,7 +19,7 @@ fn notifier_ignores_empty_strings() {
         ..Default::default()
     };
     let notifier = Notifier::from_secrets(&secrets);
-    notifier.send(Event::deploy_started("web", "fl-1"));
+    notifier.send(Event::deploy_started("web", "fl-1")).await;
 }
 
 #[test]
