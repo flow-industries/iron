@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import hmac
 import json
@@ -10,20 +11,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "").encode()
 BIND = os.environ.get("BIND", "0.0.0.0:8080")
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+TAIL_URL = os.environ.get("TAIL_URL", "")
+TAIL_USER = os.environ.get("TAIL_USER", "")
+TAIL_PASSWORD = os.environ.get("TAIL_PASSWORD", "")
+IRON_SERVER = os.environ.get("IRON_SERVER", "github")
 
 DISCORD_COLOR = {
     "info": 0x3498DB,
     "success": 0x2ECC71,
     "failure": 0xE74C3C,
-}
-
-TELEGRAM_EMOJI = {
-    "info": "ℹ️",
-    "success": "✅",
-    "failure": "❌",
 }
 
 FAILURE_CONCLUSIONS = {"failure", "timed_out", "cancelled", "action_required"}
@@ -33,51 +29,35 @@ def log(*args):
     print(*args, file=sys.stderr, flush=True)
 
 
-def post_json(url, payload, timeout=10):
+def post_event(level, app, action, msg, server):
+    if not (TAIL_URL and TAIL_USER and TAIL_PASSWORD):
+        return
+    payload = [{
+        "level": level,
+        "source": "webhook",
+        "app": app,
+        "action": action,
+        "server": server,
+        "msg": msg,
+        "color": DISCORD_COLOR.get(level, DISCORD_COLOR["info"]),
+    }]
     body = json.dumps(payload).encode()
+    auth = base64.b64encode(f"{TAIL_USER}:{TAIL_PASSWORD}".encode()).decode()
     req = urllib.request.Request(
-        url,
+        f"{TAIL_URL.rstrip('/')}/api/default/flow_events/_json",
         data=body,
         headers={
             "Content-Type": "application/json",
-            "User-Agent": "iron-webhook/1.0 (+https://github.com/flow-industries/iron)",
+            "Authorization": f"Basic {auth}",
+            "User-Agent": "iron-webhook/1.0",
         },
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:
             resp.read()
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as e:
-        host = urllib.parse.urlsplit(url).netloc or url
-        log(f"notify failed: {host}: {e}")
-
-
-def notify(level, title, description):
-    if DISCORD_WEBHOOK_URL:
-        post_json(
-            DISCORD_WEBHOOK_URL,
-            {
-                "embeds": [
-                    {
-                        "title": title,
-                        "description": description,
-                        "color": DISCORD_COLOR.get(level, DISCORD_COLOR["info"]),
-                    }
-                ]
-            },
-        )
-
-    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-        emoji = TELEGRAM_EMOJI.get(level, TELEGRAM_EMOJI["info"])
-        text = f"{emoji} <b>{title}</b>\n{description}"
-        post_json(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            {
-                "chat_id": TELEGRAM_CHAT_ID,
-                "text": text,
-                "parse_mode": "HTML",
-            },
-        )
+        log(f"tail post failed: {e}")
 
 
 def verify_signature(body, signature_header):
@@ -103,33 +83,21 @@ def handle_workflow_job(payload):
     workflow_name = job.get("workflow_name") or "workflow"
     job_name = job.get("name") or "job"
     runner_name = job.get("runner_name") or "?"
-    labels = ", ".join(job.get("labels") or [])
     head = f"{workflow_name} / {job_name}"
+    runner_app = f"runner-{runner_name}" if runner_name and runner_name != "?" else "runner"
 
     if action == "queued":
-        return ("info", f"Job queued: {head}", f"labels: {labels}")
+        return ("info", runner_app, "Job queued", head)
     if action == "in_progress":
-        return ("info", f"Job started: {head}", f"on runner-{runner_name}")
+        return ("info", runner_app, "Job started", head)
     if action == "completed":
         conclusion = (job.get("conclusion") or "").lower()
         if conclusion == "success":
-            return (
-                "success",
-                f"Job done: {head}",
-                f"on runner-{runner_name}",
-            )
+            return ("success", runner_app, "Job done", head)
         if conclusion in FAILURE_CONCLUSIONS:
-            return (
-                "failure",
-                f"Job {conclusion}: {head}",
-                f"on runner-{runner_name}",
-            )
+            return ("failure", runner_app, f"Job {conclusion}", head)
         final = conclusion or "finished"
-        return (
-            "info",
-            f"Job {final}: {head}",
-            f"on runner-{runner_name}",
-        )
+        return ("info", runner_app, f"Job {final}", head)
     return None
 
 
@@ -176,8 +144,8 @@ class Handler(BaseHTTPRequestHandler):
 
         result = handle_workflow_job(payload)
         if result is not None:
-            level, title, description = result
-            notify(level, title, description)
+            level, app, action, msg = result
+            post_event(level, app, action, msg, IRON_SERVER)
 
         self.respond(202)
 

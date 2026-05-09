@@ -11,19 +11,20 @@ pub const IMAGE: &str = "python:3.13-alpine";
 pub fn generate_compose(
     network: &str,
     secret: &str,
-    discord_webhook_url: Option<&str>,
-    telegram_bot_token: Option<&str>,
-    telegram_chat_id: Option<&str>,
+    server_name: &str,
+    tail_url: Option<&str>,
+    tail_user: Option<&str>,
+    tail_password: Option<&str>,
 ) -> String {
     let mut extra_env = String::new();
-    if let Some(url) = discord_webhook_url {
-        extra_env.push_str(&format!("      DISCORD_WEBHOOK_URL: {url}\n"));
+    if let Some(url) = tail_url {
+        extra_env.push_str(&format!("      TAIL_URL: {url}\n"));
     }
-    if let Some(token) = telegram_bot_token {
-        extra_env.push_str(&format!("      TELEGRAM_BOT_TOKEN: {token}\n"));
+    if let Some(user) = tail_user {
+        extra_env.push_str(&format!("      TAIL_USER: {user}\n"));
     }
-    if let Some(chat_id) = telegram_chat_id {
-        extra_env.push_str(&format!("      TELEGRAM_CHAT_ID: {chat_id}\n"));
+    if let Some(password) = tail_password {
+        extra_env.push_str(&format!("      TAIL_PASSWORD: {password}\n"));
     }
 
     format!(
@@ -35,6 +36,7 @@ pub fn generate_compose(
     environment:
       GITHUB_WEBHOOK_SECRET: {secret}
       BIND: 0.0.0.0:8080
+      IRON_SERVER: {server_name}
 {extra_env}    volumes:
       - ./webhook.py:/webhook.py:ro
     networks:

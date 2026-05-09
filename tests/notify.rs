@@ -11,30 +11,11 @@ fn notifier_disabled_when_no_secrets() {
 }
 
 #[test]
-fn notifier_enabled_with_discord_only() {
-    let secrets = FleetSecrets {
-        discord_webhook_url: Some("https://discord.com/api/webhooks/123/abc".to_string()),
-        ..Default::default()
-    };
-    let _notifier = Notifier::from_secrets(&secrets);
-}
-
-#[test]
-fn notifier_enabled_with_telegram_only() {
-    let secrets = FleetSecrets {
-        telegram_bot_token: Some("123:abc".to_string()),
-        telegram_chat_id: Some("-100123".to_string()),
-        ..Default::default()
-    };
-    let _notifier = Notifier::from_secrets(&secrets);
-}
-
-#[test]
 fn notifier_ignores_empty_strings() {
     let secrets = FleetSecrets {
-        discord_webhook_url: Some(String::new()),
-        telegram_bot_token: Some(String::new()),
-        telegram_chat_id: Some(String::new()),
+        tail_url: Some(String::new()),
+        tail_user: Some(String::new()),
+        tail_password: Some(String::new()),
         ..Default::default()
     };
     let notifier = Notifier::from_secrets(&secrets);
@@ -42,167 +23,112 @@ fn notifier_ignores_empty_strings() {
 }
 
 #[test]
-fn discord_payload_success_event() {
-    let event = Event::deploy_completed("site", "fl-1");
-    let payload = discord_payload(&event);
-
-    assert_eq!(payload.embeds.len(), 1);
-    assert_eq!(payload.embeds[0].color, embed_color(EventLevel::Success));
-    assert!(payload.embeds[0].title.contains("site"));
-    assert!(payload.embeds[0].description.contains("fl-1"));
+fn notifier_constructed_with_all_fields() {
+    let secrets = FleetSecrets {
+        tail_url: Some("https://tail.example.com".into()),
+        tail_user: Some("test@example.com".into()),
+        tail_password: Some("p".into()),
+        ..Default::default()
+    };
+    let _notifier = Notifier::from_secrets(&secrets);
 }
 
 #[test]
-fn discord_payload_failure_event() {
-    let event = Event::deploy_failed("site", "fl-1", "timeout");
-    let payload = discord_payload(&event);
-
-    assert_eq!(payload.embeds[0].color, embed_color(EventLevel::Failure));
-    assert!(payload.embeds[0].description.contains("timeout"));
+fn ingest_endpoint_strips_trailing_slash() {
+    assert_eq!(
+        ingest_endpoint("https://tail.example.com"),
+        "https://tail.example.com/api/default/flow_events/_json"
+    );
+    assert_eq!(
+        ingest_endpoint("https://tail.example.com/"),
+        "https://tail.example.com/api/default/flow_events/_json"
+    );
 }
 
 #[test]
-fn discord_payload_info_event() {
-    let event = Event::deploy_started("site", "fl-1");
-    let payload = discord_payload(&event);
-
-    assert_eq!(payload.embeds[0].color, embed_color(EventLevel::Info));
-}
-
-#[test]
-fn telegram_text_contains_emoji_and_html() {
-    let event = Event::deploy_completed("site", "fl-1");
-    let text = telegram_text(&event);
-
-    assert!(text.contains("\u{2705}"));
-    assert!(text.contains("<b>"));
-    assert!(text.contains("site"));
-    assert!(text.contains("fl-1"));
-}
-
-#[test]
-fn telegram_text_failure_emoji() {
-    let event = Event::deploy_failed("api", "fl-2", "connection refused");
-    let text = telegram_text(&event);
-
-    assert!(text.contains("\u{274c}"));
-    assert!(text.contains("connection refused"));
-}
-
-#[test]
-fn telegram_payload_structure() {
-    let event = Event::app_stopped("web", "fl-1");
-    let payload = telegram_payload("-100123", &event);
-
-    assert_eq!(payload.chat_id, "-100123");
-    assert_eq!(payload.parse_mode, "HTML");
-    assert!(payload.text.contains("web"));
-}
-
-#[test]
-fn embed_colors_are_distinct() {
-    let success = embed_color(EventLevel::Success);
-    let failure = embed_color(EventLevel::Failure);
-    let info = embed_color(EventLevel::Info);
-
-    assert_ne!(success, failure);
-    assert_ne!(success, info);
-    assert_ne!(failure, info);
-}
-
-#[test]
-fn event_constructors() {
-    let e = Event::deploy_started("web", "fl-1");
+fn event_constructors_set_structured_fields() {
+    let e = Event::deploy_started("paper", "fl-1");
     assert!(matches!(e.level, EventLevel::Info));
+    assert_eq!(e.source, "iron");
+    assert_eq!(e.app, "paper");
+    assert_eq!(e.action, "Deploying");
+    assert_eq!(e.server, "fl-1");
+    assert_eq!(e.msg, "");
 
-    let e = Event::deploy_completed("web", "fl-1");
+    let e = Event::deploy_completed("paper", "fl-1");
     assert!(matches!(e.level, EventLevel::Success));
+    assert_eq!(e.action, "Deploy complete");
 
-    let e = Event::deploy_failed("web", "fl-1", "err");
+    let e = Event::deploy_failed("paper", "fl-1", "connection refused");
     assert!(matches!(e.level, EventLevel::Failure));
+    assert_eq!(e.action, "Deploy failed");
+    assert_eq!(e.msg, "connection refused");
 
-    let e = Event::app_stopped("web", "fl-1");
-    assert!(matches!(e.level, EventLevel::Info));
+    let e = Event::app_stopped("paper", "fl-1");
+    assert_eq!(e.action, "Stopped");
 
-    let e = Event::app_restarted("web", "fl-1");
-    assert!(matches!(e.level, EventLevel::Info));
+    let e = Event::app_restarted("paper", "fl-1");
+    assert_eq!(e.action, "Restarted");
 
-    let e = Event::app_removed("web", &["fl-1".to_string(), "fl-2".to_string()]);
-    assert!(matches!(e.level, EventLevel::Info));
-    assert!(e.description.contains("fl-1"));
-    assert!(e.description.contains("fl-2"));
+    let e = Event::app_removed("paper", &["fl-1".into(), "fl-2".into()]);
+    assert_eq!(e.action, "Removed");
+    assert_eq!(e.server, "fl-1, fl-2");
 
-    let e = Event::check_issue("fl-1", &["container missing".to_string()]);
+    let e = Event::check_issue("fl-1", &["container missing".into(), "caddy stale".into()]);
     assert!(matches!(e.level, EventLevel::Failure));
-    assert!(e.description.contains("container missing"));
+    assert_eq!(e.app, "infra");
+    assert_eq!(e.action, "Issues detected");
+    assert!(e.msg.contains("container missing"));
+    assert!(e.msg.contains("caddy stale"));
 
     let e = Event::runner_deploy_started("ci", "fl-1");
-    assert!(matches!(e.level, EventLevel::Info));
-    assert!(e.title.contains("runner-ci"));
-    assert!(e.description.contains("fl-1"));
-
-    let e = Event::runner_deploy_completed("ci", "fl-1");
-    assert!(matches!(e.level, EventLevel::Success));
-    assert!(e.title.contains("runner-ci"));
+    assert_eq!(e.app, "runner-ci");
+    assert_eq!(e.action, "Deploying");
 
     let e = Event::runner_deploy_failed("ci", "fl-1", "ssh closed");
     assert!(matches!(e.level, EventLevel::Failure));
-    assert!(e.description.contains("ssh closed"));
+    assert_eq!(e.app, "runner-ci");
+    assert_eq!(e.msg, "ssh closed");
 
     let e = Event::runner_removed("ci", "fl-1");
-    assert!(matches!(e.level, EventLevel::Info));
-    assert!(e.title.contains("runner-ci"));
-    assert!(e.description.contains("fl-1"));
+    assert_eq!(e.app, "runner-ci");
+    assert_eq!(e.action, "Removed");
 }
 
 #[test]
-fn runner_event_payloads_render() {
-    let started = Event::runner_deploy_started("ci", "fl-1");
-    let started_dc = discord_payload(&started);
-    assert_eq!(started_dc.embeds[0].color, embed_color(EventLevel::Info));
-    assert!(started_dc.embeds[0].title.contains("runner-ci"));
-
-    let completed = Event::runner_deploy_completed("ci", "fl-1");
-    let completed_dc = discord_payload(&completed);
-    assert_eq!(
-        completed_dc.embeds[0].color,
-        embed_color(EventLevel::Success)
+fn event_levels_distinct_colors() {
+    assert_ne!(
+        EventLevel::Success.discord_color(),
+        EventLevel::Failure.discord_color()
     );
-
-    let failed = Event::runner_deploy_failed("ci", "fl-1", "boom");
-    let failed_dc = discord_payload(&failed);
-    assert_eq!(failed_dc.embeds[0].color, embed_color(EventLevel::Failure));
-    assert!(failed_dc.embeds[0].description.contains("boom"));
-
-    let removed = Event::runner_removed("ci", "fl-1");
-    let removed_tg = telegram_payload("-100", &removed);
-    assert!(removed_tg.text.contains("runner-ci"));
-    assert!(removed_tg.text.contains("fl-1"));
-}
-
-#[test]
-fn discord_payload_serializes_to_json() {
-    let event = Event::deploy_completed("site", "fl-1");
-    let payload = discord_payload(&event);
-    let json = serde_json::to_value(&payload).unwrap();
-
-    assert!(json["embeds"].is_array());
-    assert_eq!(json["embeds"][0]["color"], embed_color(EventLevel::Success));
-    assert!(
-        json["embeds"][0]["title"]
-            .as_str()
-            .unwrap()
-            .contains("site")
+    assert_ne!(
+        EventLevel::Success.discord_color(),
+        EventLevel::Info.discord_color()
+    );
+    assert_ne!(
+        EventLevel::Failure.discord_color(),
+        EventLevel::Info.discord_color()
     );
 }
 
 #[test]
-fn telegram_payload_serializes_to_json() {
-    let event = Event::app_restarted("api", "fl-1");
-    let payload = telegram_payload("-999", &event);
+fn event_levels_have_expected_string() {
+    assert_eq!(EventLevel::Info.as_str(), "info");
+    assert_eq!(EventLevel::Success.as_str(), "success");
+    assert_eq!(EventLevel::Failure.as_str(), "failure");
+}
+
+#[test]
+fn wire_payload_serializes_with_all_fields() {
+    let event = Event::deploy_failed("paper", "fl-1", "connection refused");
+    let payload = wire_payload(&event);
     let json = serde_json::to_value(&payload).unwrap();
 
-    assert_eq!(json["chat_id"], "-999");
-    assert_eq!(json["parse_mode"], "HTML");
-    assert!(json["text"].as_str().unwrap().contains("api"));
+    assert_eq!(json["level"], "failure");
+    assert_eq!(json["source"], "iron");
+    assert_eq!(json["app"], "paper");
+    assert_eq!(json["action"], "Deploy failed");
+    assert_eq!(json["server"], "fl-1");
+    assert_eq!(json["msg"], "connection refused");
+    assert_eq!(json["color"], EventLevel::Failure.discord_color());
 }

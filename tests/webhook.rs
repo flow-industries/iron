@@ -12,35 +12,37 @@ static SERVER_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn compose_includes_secret_and_image() {
-    let yaml = webhook::generate_compose("flow", "shhh", None, None, None);
+    let yaml = webhook::generate_compose("flow", "shhh", "fl-1", None, None, None);
     assert!(yaml.contains(webhook::IMAGE));
     assert!(yaml.contains("GITHUB_WEBHOOK_SECRET: shhh"));
     assert!(yaml.contains("BIND: 0.0.0.0:8080"));
+    assert!(yaml.contains("IRON_SERVER: fl-1"));
     assert!(yaml.contains("./webhook.py:/webhook.py:ro"));
     assert!(yaml.contains("- flow"));
     assert!(yaml.contains("external: true"));
 }
 
 #[test]
-fn compose_includes_optional_transports() {
+fn compose_includes_tail_env_when_set() {
     let yaml = webhook::generate_compose(
         "flow",
         "s",
-        Some("https://discord.test/abc"),
-        Some("123:abc"),
-        Some("-100"),
+        "fl-1",
+        Some("https://tail.example.com"),
+        Some("test@example.com"),
+        Some("hunter2"),
     );
-    assert!(yaml.contains("DISCORD_WEBHOOK_URL: https://discord.test/abc"));
-    assert!(yaml.contains("TELEGRAM_BOT_TOKEN: 123:abc"));
-    assert!(yaml.contains("TELEGRAM_CHAT_ID: -100"));
+    assert!(yaml.contains("TAIL_URL: https://tail.example.com"));
+    assert!(yaml.contains("TAIL_USER: test@example.com"));
+    assert!(yaml.contains("TAIL_PASSWORD: hunter2"));
 }
 
 #[test]
-fn compose_omits_optional_transports_when_absent() {
-    let yaml = webhook::generate_compose("flow", "s", None, None, None);
-    assert!(!yaml.contains("DISCORD_WEBHOOK_URL"));
-    assert!(!yaml.contains("TELEGRAM_BOT_TOKEN"));
-    assert!(!yaml.contains("TELEGRAM_CHAT_ID"));
+fn compose_omits_tail_env_when_absent() {
+    let yaml = webhook::generate_compose("flow", "s", "fl-1", None, None, None);
+    assert!(!yaml.contains("TAIL_URL"));
+    assert!(!yaml.contains("TAIL_USER"));
+    assert!(!yaml.contains("TAIL_PASSWORD"));
 }
 
 #[test]
@@ -128,9 +130,9 @@ fn start_server(secret: &str) -> Server {
         .arg(&path)
         .env("GITHUB_WEBHOOK_SECRET", secret)
         .env("BIND", format!("127.0.0.1:{port}"))
-        .env_remove("DISCORD_WEBHOOK_URL")
-        .env_remove("TELEGRAM_BOT_TOKEN")
-        .env_remove("TELEGRAM_CHAT_ID")
+        .env_remove("TAIL_URL")
+        .env_remove("TAIL_USER")
+        .env_remove("TAIL_PASSWORD")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()

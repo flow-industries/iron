@@ -229,19 +229,20 @@ async fn resolve_command(name: &str) -> Option<String> {
 fn generate_watcher_compose(
     gh_username: &str,
     gh_token: &str,
-    discord_webhook_url: Option<&str>,
-    telegram_bot_token: Option<&str>,
-    telegram_chat_id: Option<&str>,
+    server_name: &str,
+    tail_url: Option<&str>,
+    tail_user: Option<&str>,
+    tail_password: Option<&str>,
 ) -> String {
     let mut extra_env = String::new();
-    if let Some(url) = discord_webhook_url {
-        extra_env.push_str(&format!("      IRON_DISCORD_WEBHOOK_URL: {url}\n"));
+    if let Some(url) = tail_url {
+        extra_env.push_str(&format!("      IRON_TAIL_URL: {url}\n"));
     }
-    if let Some(token) = telegram_bot_token {
-        extra_env.push_str(&format!("      IRON_TELEGRAM_BOT_TOKEN: {token}\n"));
+    if let Some(user) = tail_user {
+        extra_env.push_str(&format!("      IRON_TAIL_USER: {user}\n"));
     }
-    if let Some(chat_id) = telegram_chat_id {
-        extra_env.push_str(&format!("      IRON_TELEGRAM_CHAT_ID: {chat_id}\n"));
+    if let Some(password) = tail_password {
+        extra_env.push_str(&format!("      IRON_TAIL_PASSWORD: {password}\n"));
     }
     format!(
         r#"services:
@@ -258,6 +259,7 @@ fn generate_watcher_compose(
     environment:
       GHCR_USERNAME: {gh_username}
       GHCR_TOKEN: {gh_token}
+      IRON_SERVER: {server_name}
 {extra_env}    restart: always
     healthcheck:
       test: ["CMD-SHELL", "test $(($(date +%s) - $(cat /tmp/watcher-heartbeat 2>/dev/null || echo 0))) -lt 120"]
@@ -281,8 +283,9 @@ heartbeat() { date +%s > /tmp/watcher-heartbeat 2>/dev/null || true; }
 
 notify() {
   local level="$1"
-  local title="$2"
-  local desc="$3"
+  local app="$2"
+  local action="$3"
+  local msg="$4"
 
   case "$level" in
     success) color=3066993 ;;
@@ -290,33 +293,18 @@ notify() {
     *)       color=3447003 ;;
   esac
 
-  if [ -n "${IRON_DISCORD_WEBHOOK_URL:-}" ]; then
-    payload=$(printf "{\"embeds\":[{\"title\":\"%s\",\"description\":\"%s\",\"color\":%d}]}" "$title" "$desc" "$color")
-    curl -s -X POST "$IRON_DISCORD_WEBHOOK_URL" \
+  if [ -n "${IRON_TAIL_URL:-}" ] && [ -n "${IRON_TAIL_USER:-}" ] && [ -n "${IRON_TAIL_PASSWORD:-}" ]; then
+    msg_escaped=$(printf "%s" "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    payload=$(printf '[{"level":"%s","source":"watcher","app":"%s","action":"%s","server":"%s","msg":"%s","color":%d}]' \
+      "$level" "$app" "$action" "${IRON_SERVER:-?}" "$msg_escaped" "$color")
+    curl -s -X POST "${IRON_TAIL_URL}/api/default/flow_events/_json" \
+      -u "${IRON_TAIL_USER}:${IRON_TAIL_PASSWORD}" \
       -H "Content-Type: application/json" \
       -d "$payload" > /dev/null 2>&1 || true
   fi
-
-  if [ -n "${IRON_TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${IRON_TELEGRAM_CHAT_ID:-}" ]; then
-    case "$level" in
-      success) emoji="✅" ;;
-      failure) emoji="❌" ;;
-      *)       emoji="ℹ️" ;;
-    esac
-    text=$(printf "%s <b>%s</b>\n%s" "$emoji" "$title" "$desc")
-    tg_payload=$(printf "{\"chat_id\":\"%s\",\"text\":\"%s\",\"parse_mode\":\"HTML\"}" "$IRON_TELEGRAM_CHAT_ID" "$text")
-    curl -s -X POST "https://api.telegram.org/bot${IRON_TELEGRAM_BOT_TOKEN}/sendMessage" \
-      -H "Content-Type: application/json" \
-      -d "$tg_payload" > /dev/null 2>&1 || true
-  fi
 }
 
-needs_curl=false
-if [ -n "${IRON_DISCORD_WEBHOOK_URL:-}" ] || [ -n "${IRON_TELEGRAM_BOT_TOKEN:-}" ]; then
-  needs_curl=true
-fi
-
-if [ "$needs_curl" = "true" ] && ! command -v curl > /dev/null 2>&1; then
+if [ -n "${IRON_TAIL_URL:-}" ] && ! command -v curl > /dev/null 2>&1; then
   apt-get update -qq > /dev/null 2>&1 && apt-get install -y -qq curl > /dev/null 2>&1
 fi
 
@@ -347,7 +335,7 @@ while true; do
 
     if ! pull_err=$(timeout "$PULL_TIMEOUT" docker pull "$image" -q 2>&1); then
       log "ERROR: pull failed (${PULL_TIMEOUT}s timeout) for ${image}: ${pull_err}"
-      notify "failure" "Pull Failed: ${project}" "Failed to pull ${image}: ${pull_err}"
+      notify "failure" "${project}" "Pull failed" "${pull_err}"
       continue
     fi
 
@@ -360,22 +348,22 @@ while true; do
     log "UPDATE: ${project} (${short_old} -> ${short_new})"
 
     if [ "$strategy" = "recreate" ]; then
-      notify "info" "Update Detected: ${project}" "Recreating (${short_old} -> ${short_new})"
+      notify "info" "${project}" "Update detected" "${short_old} -> ${short_new}, recreating"
       if docker compose -f "$compose" up -d --force-recreate 2>&1; then
         log "RECREATE: ${project} done"
-        notify "success" "Recreate Complete: ${project}" "Image updated (${short_old} -> ${short_new})"
+        notify "success" "${project}" "Recreate complete" "${short_old} -> ${short_new}"
       else
         log "ERROR: recreate failed for ${project}"
-        notify "failure" "Recreate Failed: ${project}" "Failed to recreate container"
+        notify "failure" "${project}" "Recreate failed" "could not recreate container"
       fi
     else
-      notify "info" "Update Detected: ${project}" "Rolling out (${short_old} -> ${short_new})"
+      notify "info" "${project}" "Update detected" "${short_old} -> ${short_new}, rolling out"
       if docker rollout "$project" -f "$compose" 2>&1; then
         log "ROLLOUT: ${project} done"
-        notify "success" "Rollout Complete: ${project}" "Image updated (${short_old} -> ${short_new})"
+        notify "success" "${project}" "Rollout complete" "${short_old} -> ${short_new}"
       else
         log "ERROR: rollout failed for ${project}"
-        notify "failure" "Rollout Failed: ${project}" "Failed to roll out update"
+        notify "failure" "${project}" "Rollout failed" "could not roll out update"
       fi
     fi
   done
@@ -425,9 +413,10 @@ pub async fn deploy_infra(
             let watcher_compose = generate_watcher_compose(
                 username,
                 token,
-                secrets.discord_webhook_url.as_deref(),
-                secrets.telegram_bot_token.as_deref(),
-                secrets.telegram_chat_id.as_deref(),
+                server_name,
+                secrets.tail_url.as_deref(),
+                secrets.tail_user.as_deref(),
+                secrets.tail_password.as_deref(),
             );
             pool.upload_file(
                 server_name,
@@ -472,9 +461,10 @@ pub async fn deploy_infra(
             let compose = webhook::generate_compose(
                 network,
                 secret,
-                secrets.discord_webhook_url.as_deref(),
-                secrets.telegram_bot_token.as_deref(),
-                secrets.telegram_chat_id.as_deref(),
+                server_name,
+                secrets.tail_url.as_deref(),
+                secrets.tail_user.as_deref(),
+                secrets.tail_password.as_deref(),
             );
             pool.upload_file(
                 server_name,
