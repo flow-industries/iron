@@ -149,13 +149,13 @@ pub enum Command {
         args: Vec<String>,
     },
 
-    /// Update iron CLI to the latest version
+    /// Update iron CLI to the latest version (from upstream git by default)
     Update {
-        /// Install from the git repository instead of crates.io
-        #[arg(long)]
-        git: bool,
+        /// Install from crates.io instead of git (lags behind upstream main)
+        #[arg(long, conflicts_with = "git_url")]
+        crates: bool,
 
-        /// Git repository URL (implies --git, defaults to the flow-industries/iron upstream)
+        /// Git repository URL (defaults to the flow-industries/iron upstream)
         #[arg(long, value_name = "URL")]
         git_url: Option<String>,
     },
