@@ -46,26 +46,37 @@ struct CreateCustomDomain<'a> {
 }
 
 #[derive(Serialize)]
-struct CreateApiToken<'a> {
+struct CreateAccountToken<'a> {
     name: &'a str,
     policies: Vec<TokenPolicy<'a>>,
 }
 
 #[derive(Serialize)]
 struct TokenPolicy<'a> {
-    permission: &'a str,
-    #[serde(rename = "buckets")]
-    buckets: Vec<&'a str>,
+    effect: &'a str,
+    resources: serde_json::Value,
+    permission_groups: Vec<PermissionGroupRef<'a>>,
+}
+
+#[derive(Serialize)]
+struct PermissionGroupRef<'a> {
+    id: &'a str,
 }
 
 #[derive(Deserialize)]
-struct ApiTokenResult {
+struct AccountTokenResult {
     id: String,
-    #[serde(rename = "accessKeyId")]
-    access_key_id: String,
-    #[serde(rename = "secretAccessKey")]
-    secret_access_key: String,
+    value: String,
 }
+
+#[derive(Deserialize)]
+struct PermissionGroup {
+    id: String,
+    name: String,
+}
+
+const R2_BUCKET_SCOPE: &str = "com.cloudflare.edge.r2.bucket";
+const R2_WRITE_PERMISSION_NAME: &str = "Workers R2 Storage Bucket Item Write";
 
 pub async fn verify_r2_access(api_token: &str, account_id: &str) -> Result<()> {
     let client = reqwest::Client::new();
@@ -185,16 +196,28 @@ pub async fn mint_app_token(
     bucket_names: &[&str],
 ) -> Result<R2Credentials> {
     let client = reqwest::Client::new();
-    let url = format!("{CF_API}/accounts/{account_id}/r2/api_tokens");
+
+    let write_group_id = fetch_r2_write_permission_group_id(&client, api_token).await?;
+
+    let resources: serde_json::Map<String, serde_json::Value> = bucket_names
+        .iter()
+        .map(|name| (r2_bucket_resource_key(account_id, name), "*".into()))
+        .collect();
+
     let token_name = format!("iron-{app_name}");
-    let body = CreateApiToken {
+    let body = CreateAccountToken {
         name: &token_name,
         policies: vec![TokenPolicy {
-            permission: "admin-read-write",
-            buckets: bucket_names.to_vec(),
+            effect: "allow",
+            resources: serde_json::Value::Object(resources),
+            permission_groups: vec![PermissionGroupRef {
+                id: &write_group_id,
+            }],
         }],
     };
-    let resp: CfResponse<ApiTokenResult> = client
+
+    let url = format!("{CF_API}/accounts/{account_id}/tokens");
+    let resp: CfResponse<AccountTokenResult> = client
         .post(&url)
         .bearer_auth(api_token)
         .json(&body)
@@ -205,23 +228,24 @@ pub async fn mint_app_token(
     if !resp.success {
         let msgs: Vec<_> = resp.errors.iter().map(|e| e.message.as_str()).collect();
         anyhow::bail!(
-            "Failed to mint R2 API token for app '{app_name}': {}",
+            "Failed to mint account token for app '{app_name}': {}",
             msgs.join(", ")
         );
     }
     let result = resp
         .result
-        .context("Cloudflare returned success without a result body for R2 token creation")?;
+        .context("Cloudflare returned success without a result body for token creation")?;
+
     Ok(R2Credentials {
-        token_id: result.id,
-        access_key_id: result.access_key_id,
-        secret_access_key: result.secret_access_key,
+        token_id: result.id.clone(),
+        access_key_id: result.id,
+        secret_access_key: derive_secret_access_key(&result.value),
     })
 }
 
 pub async fn revoke_token(api_token: &str, account_id: &str, token_id: &str) -> Result<()> {
     let client = reqwest::Client::new();
-    let url = format!("{CF_API}/accounts/{account_id}/r2/api_tokens/{token_id}");
+    let url = format!("{CF_API}/accounts/{account_id}/tokens/{token_id}");
     let resp = client.delete(&url).bearer_auth(api_token).send().await?;
     let status = resp.status();
     if status == reqwest::StatusCode::NOT_FOUND {
@@ -230,12 +254,51 @@ pub async fn revoke_token(api_token: &str, account_id: &str, token_id: &str) -> 
     let body: CfResponse<serde_json::Value> = resp.json().await?;
     if !body.success {
         let msgs: Vec<_> = body.errors.iter().map(|e| e.message.as_str()).collect();
-        anyhow::bail!(
-            "Failed to revoke R2 token '{token_id}': {}",
-            msgs.join(", ")
-        );
+        anyhow::bail!("Failed to revoke token '{token_id}': {}", msgs.join(", "));
     }
     Ok(())
+}
+
+async fn fetch_r2_write_permission_group_id(
+    client: &reqwest::Client,
+    api_token: &str,
+) -> Result<String> {
+    let url = format!("{CF_API}/user/tokens/permission_groups?scope={R2_BUCKET_SCOPE}");
+    let resp: CfResponse<Vec<PermissionGroup>> = client
+        .get(&url)
+        .bearer_auth(api_token)
+        .send()
+        .await?
+        .json()
+        .await?;
+    if !resp.success {
+        let msgs: Vec<_> = resp.errors.iter().map(|e| e.message.as_str()).collect();
+        anyhow::bail!("Failed to list R2 permission groups: {}", msgs.join(", "));
+    }
+    let groups = resp
+        .result
+        .context("Cloudflare returned success without permission groups list")?;
+    groups
+        .into_iter()
+        .find(|g| g.name == R2_WRITE_PERMISSION_NAME)
+        .map(|g| g.id)
+        .with_context(|| {
+            format!(
+                "Cloudflare did not list the '{R2_WRITE_PERMISSION_NAME}' R2 permission group; \
+                 ensure your API token has the 'Account → API Tokens → Edit' scope"
+            )
+        })
+}
+
+pub fn r2_bucket_resource_key(account_id: &str, bucket: &str) -> String {
+    format!("{R2_BUCKET_SCOPE}.{account_id}_default_{bucket}")
+}
+
+pub fn derive_secret_access_key(token_value: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(token_value.as_bytes());
+    hex::encode(hasher.finalize())
 }
 
 pub fn s3_endpoint(account_id: &str) -> String {
