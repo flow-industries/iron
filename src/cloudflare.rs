@@ -187,7 +187,17 @@ pub async fn get_record(
     zone_id: &str,
     hostname: &str,
 ) -> Result<Option<DnsRecord>> {
-    let url = format!("{CF_API}/zones/{zone_id}/dns_records?type=A&name={hostname}");
+    get_record_typed(client, api_token, zone_id, hostname, "A").await
+}
+
+async fn get_record_typed(
+    client: &reqwest::Client,
+    api_token: &str,
+    zone_id: &str,
+    hostname: &str,
+    record_type: &str,
+) -> Result<Option<DnsRecord>> {
+    let url = format!("{CF_API}/zones/{zone_id}/dns_records?type={record_type}&name={hostname}");
     let resp: CfResponse<Vec<DnsRecord>> = client
         .get(&url)
         .bearer_auth(api_token)
@@ -196,4 +206,91 @@ pub async fn get_record(
         .json()
         .await?;
     Ok(resp.result.into_iter().next())
+}
+
+pub async fn ensure_cname_record(
+    api_token: &str,
+    hostname: &str,
+    target: &str,
+    proxied: bool,
+) -> Result<()> {
+    let client = reqwest::Client::new();
+    let zone_name = extract_zone(hostname);
+    let zone_id = get_zone_id(&client, api_token, &zone_name)
+        .await
+        .with_context(|| format!("Failed to find Cloudflare zone for {zone_name}"))?;
+
+    let existing = get_record_typed(&client, api_token, &zone_id, hostname, "CNAME").await?;
+
+    match existing {
+        Some(record) if record.content == target && record.proxied == proxied => {}
+        Some(record) => {
+            let url = format!("{}/zones/{}/dns_records/{}", CF_API, zone_id, record.id);
+            let resp: CfResponse<serde_json::Value> = client
+                .patch(&url)
+                .bearer_auth(api_token)
+                .json(&UpdateRecord {
+                    content: target.to_string(),
+                    proxied,
+                })
+                .send()
+                .await?
+                .json()
+                .await?;
+            if !resp.success {
+                let msgs: Vec<_> = resp.errors.iter().map(|e| e.message.as_str()).collect();
+                anyhow::bail!("Failed to update CNAME record: {}", msgs.join(", "));
+            }
+        }
+        None => {
+            let url = format!("{CF_API}/zones/{zone_id}/dns_records");
+            let resp: CfResponse<serde_json::Value> = client
+                .post(&url)
+                .bearer_auth(api_token)
+                .json(&CreateRecord {
+                    record_type: "CNAME".to_string(),
+                    name: hostname.to_string(),
+                    content: target.to_string(),
+                    ttl: 1,
+                    proxied,
+                })
+                .send()
+                .await?
+                .json()
+                .await?;
+            if !resp.success {
+                let msgs: Vec<_> = resp.errors.iter().map(|e| e.message.as_str()).collect();
+                anyhow::bail!("Failed to create CNAME record: {}", msgs.join(", "));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn delete_cname_record(api_token: &str, hostname: &str) -> Result<()> {
+    let client = reqwest::Client::new();
+    let zone_name = extract_zone(hostname);
+    let zone_id = get_zone_id(&client, api_token, &zone_name)
+        .await
+        .with_context(|| format!("Failed to find Cloudflare zone for {zone_name}"))?;
+
+    let existing = get_record_typed(&client, api_token, &zone_id, hostname, "CNAME").await?;
+
+    if let Some(record) = existing {
+        let url = format!("{CF_API}/zones/{zone_id}/dns_records/{}", record.id);
+        let resp: CfResponse<serde_json::Value> = client
+            .delete(&url)
+            .bearer_auth(api_token)
+            .send()
+            .await?
+            .json()
+            .await?;
+        if !resp.success {
+            let msgs: Vec<_> = resp.errors.iter().map(|e| e.message.as_str()).collect();
+            anyhow::bail!("Failed to delete CNAME record: {}", msgs.join(", "));
+        }
+    }
+
+    Ok(())
 }

@@ -83,7 +83,7 @@ iron runner list                   # queries GitHub API for live status
 
 # Login (set API tokens in fleet.env.toml)
 iron login         # Cloudflare + GitHub sequentially
-iron login cf      # Cloudflare API token only
+iron login cf      # Cloudflare API token + account ID (account ID required for R2)
 iron login gh      # GitHub token (GHCR + runner management)
 
 # Install Ansible dependencies (once)
@@ -108,6 +108,15 @@ ansible-galaxy install -r ansible/requirements.yml
 
 **Watcher:** A simple Alpine container running `watch.sh` — polls every 30s, uses `docker pull` + image ID comparison to detect new GHCR images, then calls `docker rollout` (rolling) or `docker compose up -d --force-recreate` (recreate). Deployed automatically by `iron deploy`/`iron check` when GHCR apps exist.
 
+**R2 buckets (optional, per app):** Apps declare `[[apps.<name>.r2_buckets]]` blocks in `fleet.toml` (`name`, optional `public_domain`). Requires `cloudflare_api_token` + `cloudflare_account_id` in `fleet.env.toml`; the CF token needs `Workers R2 Storage → Edit` and `Account → API Tokens → Edit` scopes in addition to the usual `Zone DNS → Edit`.
+
+- On `iron deploy`: ensures each bucket exists (idempotent), attaches `public_domain` as a custom domain + CNAME if set, and on first deploy mints a scoped R2 S3 API token (`admin-read-write` on the app's buckets) and persists `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_ACCESS_KEY_TOKEN_ID` to `fleet.env.toml` under `[apps.<name>]`. Subsequent deploys reuse the persisted credentials.
+- Injected into the container `.env`: `R2_ENDPOINT`, `R2_ACCOUNT_ID`, `R2_BUCKET_<KEY>`, `R2_PUBLIC_URL_<KEY>`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`. App config can reference these via Docker compose's `${VAR}` interpolation since `compose::generate_env` writes one `.env` file.
+- `R2_ACCESS_KEY_TOKEN_ID` is admin-only (used for revocation in `iron remove`) and filtered out of the generated `.env` by `compose::HIDDEN_FROM_CONTAINER`.
+- `iron check` verifies each declared bucket still exists; `iron status` lists declared buckets in a footer table.
+- `iron remove` revokes the token and deletes any custom-domain CNAMEs but leaves bucket data intact (delete via Cloudflare dashboard).
+- **Known limitation:** changing a bucket's `public_domain` does not detach the previous custom domain on Cloudflare or remove the old CNAME — the old hostname stays bound to the bucket until cleaned up manually.
+
 **Webhook receiver (optional):** A small `python:3-alpine` container running `webhook.py` (stdlib only) that accepts GitHub `workflow_job` webhooks at `https://<domain>/github`, validates the `X-Hub-Signature-256` HMAC against `github_webhook_secret`, filters to self-hosted-runner jobs only, and forwards Discord/Telegram notifications using the same payload shape as the Notifier. Enabled by adding a `[webhook]` table to `fleet.toml` (`server`, `domain`) and setting `github_webhook_secret` in `fleet.env.toml`. Deployed by `iron check` (and `iron server add` for the bootstrap server). On every `iron check`, `webhook::ensure_github_webhooks` derives `(scope, target)` pairs from `fleet.runners` and idempotently creates or updates the matching webhook in each org/repo via the GitHub API, reusing `gh_token` (always PATCHes the secret since GitHub doesn't return it on GET, so rotating `github_webhook_secret` re-propagates automatically). Failures surface in the existing `check_issue` notification.
 
 ## Project Structure
@@ -121,7 +130,8 @@ src/
   ssh.rs        — SSH connection pool (openssh crate, wraps system ssh)
   compose.rs    — generate docker-compose.yml from App config
   caddy.rs      — generate Caddy reverse proxy fragments
-  cloudflare.rs — ensure/delete DNS A records via Cloudflare API
+  cloudflare.rs — ensure/delete DNS A and CNAME records via Cloudflare API
+  r2.rs         — R2 bucket provisioning, custom domains, scoped S3 token mint/revoke
   deploy.rs     — full deploy pipeline
   stop.rs       — stop app containers
   restart.rs    — restart app containers
@@ -147,6 +157,7 @@ tests/
   server.rs     — server management
   runner.rs     — runner config, compose gen, toml_edit
   webhook.rs    — webhook compose + script HMAC validation
+  r2.rs         — R2 endpoint/CNAME format helpers
 ```
 
 ## Pre-push Checklist
@@ -169,7 +180,7 @@ cargo test
 
 ## Secrets
 
-`fleet.env.toml` (gitignored) holds all env vars — both secrets and non-secret config. `fleet.toml` contains no env vars. Fleet-level secrets: `gh_token` (GHCR image pulls + runner management), `gh_username` (GHCR org/username), `cloudflare_api_token` (DNS management), `github_webhook_secret` (HMAC for the optional webhook receiver — generate with `openssl rand -hex 32`). App-level secrets like `DB_PASSWORD` go under `[apps.<name>]`.
+`fleet.env.toml` (gitignored) holds all env vars — both secrets and non-secret config. `fleet.toml` contains no env vars. Fleet-level secrets: `gh_token` (GHCR image pulls + runner management), `gh_username` (GHCR org/username), `cloudflare_api_token` (DNS + R2 management), `cloudflare_account_id` (required for R2 buckets), `github_webhook_secret` (HMAC for the optional webhook receiver — generate with `openssl rand -hex 32`). App-level secrets like `DB_PASSWORD` go under `[apps.<name>]`. R2 S3 credentials (`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCESS_KEY_TOKEN_ID`) are also persisted under `[apps.<name>]` automatically by `iron deploy` on first run for any app that declares `r2_buckets`.
 
 ### Comments: ABSOLUTE RULE
 

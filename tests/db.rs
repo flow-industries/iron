@@ -13,6 +13,7 @@ fn make_app(services: Vec<ResolvedSidecar>) -> ResolvedApp {
         env: HashMap::new(),
         services,
         ports: vec![],
+        r2_buckets: vec![],
     }
 }
 

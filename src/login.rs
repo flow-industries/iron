@@ -6,8 +6,12 @@ use toml_edit::DocumentMut;
 use crate::cli::LoginCommand;
 use crate::ui;
 
-const CF_TOKEN_URL: &str =
-    "https://dash.cloudflare.com/profile/api-tokens → Create Token → Edit zone DNS";
+const CF_TOKEN_URL: &str = "https://dash.cloudflare.com/profile/api-tokens";
+const CF_TOKEN_SCOPES: &[&str] = &[
+    "Zone → DNS → Edit",
+    "Account → Workers R2 Storage → Edit (for R2 buckets)",
+    "Account → API Tokens → Edit (for minting scoped R2 S3 credentials)",
+];
 const GH_TOKEN_URL: &str =
     "https://github.com/settings/tokens/new?scopes=read:packages,admin:org&description=flow-iron";
 
@@ -29,6 +33,10 @@ async fn cloudflare_login(env_path: &Path) -> Result<()> {
     ui::header("Cloudflare");
     println!("  Create a token at:");
     println!("  {CF_TOKEN_URL}");
+    println!("  Required scopes:");
+    for scope in CF_TOKEN_SCOPES {
+        println!("    - {scope}");
+    }
     println!();
 
     let token = ui::prompt_secret("Cloudflare API token:")
@@ -40,7 +48,20 @@ async fn cloudflare_login(env_path: &Path) -> Result<()> {
     ui::success("Token is valid");
 
     save_fleet_secret(env_path, "cloudflare_api_token", &token)?;
-    ui::success("Saved to fleet.env.toml");
+    ui::success("Saved cloudflare_api_token to fleet.env.toml");
+
+    println!();
+    println!("  Account ID is shown in the URL when you visit:");
+    println!("  https://dash.cloudflare.com/  (e.g. dash.cloudflare.com/<account_id>)");
+    let account_id = ui::prompt("Cloudflare account ID (optional, required for R2):")
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    if let Some(account_id) = account_id {
+        save_fleet_secret(env_path, "cloudflare_account_id", &account_id)?;
+        ui::success("Saved cloudflare_account_id to fleet.env.toml");
+    }
+
     Ok(())
 }
 

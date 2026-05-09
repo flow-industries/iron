@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 
 use crate::cloudflare;
 use crate::notify::{Event, Notifier};
+use crate::r2;
 use crate::ssh::SshPool;
 use crate::ui;
 
@@ -90,6 +91,29 @@ pub async fn run(
                 sp.finish_and_clear();
                 ui::success("DNS records deleted");
             }
+        }
+    }
+
+    if !app.r2_buckets.is_empty() {
+        if let (Some(cf_token), Some(account_id)) = (
+            fleet.secrets.cloudflare_api_token.as_deref(),
+            fleet.secrets.cloudflare_account_id.as_deref(),
+        ) {
+            let sp = ui::spinner("Cleaning up R2 resources...");
+            for bucket in &app.r2_buckets {
+                if let Some(ref domain) = bucket.public_domain {
+                    cloudflare::delete_cname_record(cf_token, domain).await?;
+                }
+            }
+            if let Some(token_id) = app.env.get("R2_ACCESS_KEY_TOKEN_ID") {
+                r2::revoke_token(cf_token, account_id, token_id).await?;
+            }
+            sp.finish_and_clear();
+            let bucket_list: Vec<&str> = app.r2_buckets.iter().map(|b| b.name.as_str()).collect();
+            ui::success(&format!(
+                "R2 token revoked, custom-domain CNAMEs removed (buckets {} left intact — delete in Cloudflare dashboard if no longer needed)",
+                bucket_list.join(", ")
+            ));
         }
     }
 

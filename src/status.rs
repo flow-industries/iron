@@ -56,6 +56,7 @@ pub async fn run(
     } else {
         print_status(&pool, &filtered, &cols, &release_map).await?;
         pool.close().await?;
+        print_r2_section(fleet);
     }
     Ok(())
 }
@@ -325,4 +326,38 @@ async fn print_status(
         println!("{table}");
     }
     Ok(())
+}
+
+pub fn print_r2_section(fleet: &Fleet) {
+    let apps_with_buckets = fleet.apps_with_r2();
+    if apps_with_buckets.is_empty() {
+        return;
+    }
+
+    println!();
+    ui::header("R2 buckets");
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL_CONDENSED)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_header(vec![
+            Cell::new("App"),
+            Cell::new("Bucket"),
+            Cell::new("Public domain"),
+        ]);
+
+    for app in apps_with_buckets {
+        for bucket in &app.r2_buckets {
+            let domain = bucket.public_domain.as_deref().unwrap_or("—");
+            table.add_row(vec![
+                Cell::new(&app.name),
+                Cell::new(&bucket.name),
+                Cell::new(domain),
+            ]);
+        }
+    }
+
+    println!("{table}");
 }

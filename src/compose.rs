@@ -145,6 +145,9 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
     out
 }
 
+// Persisted to fleet.env.toml for `iron remove` revocation; must never reach app containers.
+const HIDDEN_FROM_CONTAINER: &[&str] = &["R2_ACCESS_KEY_TOKEN_ID"];
+
 pub fn generate_env(app: &ResolvedApp) -> String {
     let mut out = String::new();
     let mut all_vars: std::collections::HashMap<String, String> = app.env.clone();
@@ -153,6 +156,10 @@ pub fn generate_env(app: &ResolvedApp) -> String {
         for (k, v) in &svc.env {
             all_vars.entry(k.clone()).or_insert_with(|| v.clone());
         }
+    }
+
+    for key in HIDDEN_FROM_CONTAINER {
+        all_vars.remove(*key);
     }
 
     let mut keys: Vec<_> = all_vars.keys().collect();

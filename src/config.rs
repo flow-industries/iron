@@ -59,6 +59,15 @@ pub struct App {
     pub services: Vec<Sidecar>,
     #[serde(default)]
     pub ports: Vec<PortMapping>,
+    #[serde(default)]
+    pub r2_buckets: Vec<R2Bucket>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct R2Bucket {
+    pub name: String,
+    pub public_domain: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default, PartialEq)]
@@ -146,6 +155,7 @@ pub struct FleetSecrets {
     pub gh_token: Option<String>,
     pub gh_username: Option<String>,
     pub cloudflare_api_token: Option<String>,
+    pub cloudflare_account_id: Option<String>,
     pub discord_webhook_url: Option<String>,
     pub telegram_bot_token: Option<String>,
     pub telegram_chat_id: Option<String>,
@@ -163,6 +173,18 @@ pub struct Fleet {
     pub webhook: Option<WebhookConfig>,
 }
 
+impl Fleet {
+    pub fn apps_with_r2(&self) -> Vec<&ResolvedApp> {
+        let mut apps: Vec<&ResolvedApp> = self
+            .apps
+            .values()
+            .filter(|a| !a.r2_buckets.is_empty())
+            .collect();
+        apps.sort_by(|a, b| a.name.cmp(&b.name));
+        apps
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ResolvedApp {
     pub name: String,
@@ -174,6 +196,7 @@ pub struct ResolvedApp {
     pub env: HashMap<String, String>,
     pub services: Vec<ResolvedSidecar>,
     pub ports: Vec<PortMapping>,
+    pub r2_buckets: Vec<R2Bucket>,
 }
 
 #[derive(Debug, Clone)]
@@ -184,6 +207,19 @@ pub struct ResolvedSidecar {
     pub env: HashMap<String, String>,
     pub healthcheck: Option<String>,
     pub depends_on: Option<String>,
+}
+
+fn is_valid_r2_bucket_name(s: &str) -> bool {
+    let len = s.len();
+    if !(3..=63).contains(&len) {
+        return false;
+    }
+    let bytes = s.as_bytes();
+    if bytes[0] == b'-' || bytes[len - 1] == b'-' {
+        return false;
+    }
+    s.chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 fn is_valid_caddy_duration(s: &str) -> bool {
@@ -271,6 +307,45 @@ fn validate(config: &FleetConfig) -> Result<()> {
                 if !is_valid_caddy_duration(health_interval) {
                     bail!(
                         "App '{app_name}' has invalid health_interval '{health_interval}' (expected format: 5s, 1m, 500ms)"
+                    );
+                }
+            }
+        }
+
+        let mut seen_bucket_names: HashSet<&str> = HashSet::new();
+        for bucket in &app.r2_buckets {
+            if bucket.name.is_empty() {
+                bail!("App '{app_name}' has an R2 bucket with an empty name");
+            }
+            if !is_valid_r2_bucket_name(&bucket.name) {
+                bail!(
+                    "App '{app_name}' has invalid R2 bucket name '{}' (lowercase alphanumerics + hyphens, 3-63 chars)",
+                    bucket.name
+                );
+            }
+            if !seen_bucket_names.insert(&bucket.name) {
+                bail!(
+                    "App '{app_name}' has duplicate R2 bucket name '{}'",
+                    bucket.name
+                );
+            }
+            if let Some(ref domain) = bucket.public_domain {
+                if domain.is_empty() {
+                    bail!(
+                        "App '{app_name}' R2 bucket '{}' has an empty public_domain",
+                        bucket.name
+                    );
+                }
+                if domain.contains("://") || domain.contains(char::is_whitespace) {
+                    bail!(
+                        "App '{app_name}' R2 bucket '{}' has invalid public_domain '{domain}'",
+                        bucket.name
+                    );
+                }
+                if !domain.contains('.') {
+                    bail!(
+                        "App '{app_name}' R2 bucket '{}' has public_domain '{domain}' with no dot",
+                        bucket.name
                     );
                 }
             }
@@ -416,6 +491,7 @@ pub fn load(config_path: &str) -> Result<Fleet> {
                 env,
                 services: resolved_services,
                 ports: app.ports,
+                r2_buckets: app.r2_buckets,
             },
         );
     }

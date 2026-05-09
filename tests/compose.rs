@@ -18,6 +18,7 @@ fn simple_app() -> ResolvedApp {
         env: std::collections::HashMap::new(),
         services: vec![],
         ports: vec![],
+        r2_buckets: vec![],
     }
 }
 
@@ -57,6 +58,7 @@ fn generate_with_ports() {
             external: 9999,
             protocol: "tcp".to_string(),
         }],
+        r2_buckets: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("\"9999:9999\""));
@@ -96,6 +98,7 @@ fn generate_with_sidecars() {
             },
         ],
         ports: vec![],
+        r2_buckets: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("postgres:"));
@@ -137,6 +140,7 @@ fn generate_env_file() {
             depends_on: None,
         }],
         ports: vec![],
+        r2_buckets: vec![],
     };
     let env = generate_env(&app);
     assert!(env.contains("DB_PASSWORD=secret123"));
@@ -177,6 +181,7 @@ fn compose_uses_env_file_not_shell_interpolation() {
             depends_on: None,
         }],
         ports: vec![],
+        r2_buckets: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("env_file:\n      - .env"));
@@ -184,4 +189,24 @@ fn compose_uses_env_file_not_shell_interpolation() {
     assert!(!output.contains("${NEXT_PUBLIC_SITE_URL}"));
     assert!(!output.contains("${POSTGRES_USER}"));
     assert!(!output.contains("environment:"));
+}
+
+#[test]
+fn generate_env_hides_admin_only_keys() {
+    let mut app = simple_app();
+    app.env = [
+        ("R2_ACCESS_KEY_ID".into(), "AKIA-public".into()),
+        ("R2_SECRET_ACCESS_KEY".into(), "secret-public".into()),
+        ("R2_ACCESS_KEY_TOKEN_ID".into(), "internal-token-id".into()),
+        ("PORT".into(), "3000".into()),
+    ]
+    .into();
+
+    let env = generate_env(&app);
+
+    assert!(env.contains("R2_ACCESS_KEY_ID=AKIA-public"));
+    assert!(env.contains("R2_SECRET_ACCESS_KEY=secret-public"));
+    assert!(env.contains("PORT=3000"));
+    assert!(!env.contains("R2_ACCESS_KEY_TOKEN_ID"));
+    assert!(!env.contains("internal-token-id"));
 }
