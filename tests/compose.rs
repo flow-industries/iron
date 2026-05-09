@@ -190,3 +190,23 @@ fn compose_uses_env_file_not_shell_interpolation() {
     assert!(!output.contains("${POSTGRES_USER}"));
     assert!(!output.contains("environment:"));
 }
+
+#[test]
+fn generate_env_hides_admin_only_keys() {
+    let mut app = simple_app();
+    app.env = [
+        ("R2_ACCESS_KEY_ID".into(), "AKIA-public".into()),
+        ("R2_SECRET_ACCESS_KEY".into(), "secret-public".into()),
+        ("R2_ACCESS_KEY_TOKEN_ID".into(), "internal-token-id".into()),
+        ("PORT".into(), "3000".into()),
+    ]
+    .into();
+
+    let env = generate_env(&app);
+
+    assert!(env.contains("R2_ACCESS_KEY_ID=AKIA-public"));
+    assert!(env.contains("R2_SECRET_ACCESS_KEY=secret-public"));
+    assert!(env.contains("PORT=3000"));
+    assert!(!env.contains("R2_ACCESS_KEY_TOKEN_ID"));
+    assert!(!env.contains("internal-token-id"));
+}

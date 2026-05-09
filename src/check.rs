@@ -65,6 +65,7 @@ pub async fn run(fleet: &Fleet, server_filter: Option<&str>, notifier: &Notifier
     }
 
     check_dns(fleet, &filtered, &http).await;
+    check_r2(fleet, &http).await;
 
     let _ = pool.close().await;
     Ok(())
@@ -393,6 +394,45 @@ async fn check_runners(
     }
 
     issues
+}
+
+async fn check_r2(fleet: &Fleet, client: &reqwest::Client) {
+    let apps_with_buckets = fleet.apps_with_r2();
+    if apps_with_buckets.is_empty() {
+        return;
+    }
+
+    let cf_token = fleet
+        .secrets
+        .cloudflare_api_token
+        .as_deref()
+        .filter(|s| !s.is_empty());
+    let account_id = fleet
+        .secrets
+        .cloudflare_account_id
+        .as_deref()
+        .filter(|s| !s.is_empty());
+
+    ui::header("R2");
+
+    let (Some(token), Some(account)) = (cf_token, account_id) else {
+        ui::error("cloudflare_api_token or cloudflare_account_id missing — run `iron login cf`");
+        return;
+    };
+
+    for app in apps_with_buckets {
+        for bucket in &app.r2_buckets {
+            let label = match &bucket.public_domain {
+                Some(domain) => format!("{} → {} (public: {domain})", app.name, bucket.name),
+                None => format!("{} → {}", app.name, bucket.name),
+            };
+            match crate::r2::bucket_exists(client, token, account, &bucket.name).await {
+                Ok(true) => ui::success(&label),
+                Ok(false) => ui::error(&format!("{label} (missing)")),
+                Err(e) => ui::error(&format!("{label} ({e})")),
+            }
+        }
+    }
 }
 
 async fn check_dns(fleet: &Fleet, filtered: &HashMap<String, Server>, client: &reqwest::Client) {

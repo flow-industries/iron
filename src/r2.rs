@@ -6,6 +6,8 @@ const CF_API: &str = "https://api.cloudflare.com/client/v4";
 #[derive(Deserialize)]
 struct CfResponse<T> {
     success: bool,
+    // serde derive on a generic struct propagates `T: Default` from bare `#[serde(default)]`
+    // even though `Option<T>::default()` doesn't need it; the helper sidesteps that bound.
     #[serde(default = "default_result")]
     result: Option<T>,
     #[serde(default)]
@@ -85,12 +87,37 @@ pub async fn verify_r2_access(api_token: &str, account_id: &str) -> Result<()> {
     Ok(())
 }
 
+pub async fn bucket_exists(
+    client: &reqwest::Client,
+    api_token: &str,
+    account_id: &str,
+    name: &str,
+) -> Result<bool> {
+    let url = format!("{CF_API}/accounts/{account_id}/r2/buckets/{name}");
+    let resp = client.get(&url).bearer_auth(api_token).send().await?;
+    let status = resp.status();
+    if status.is_success() {
+        return Ok(true);
+    }
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(false);
+    }
+    let body: CfResponse<serde_json::Value> = resp.json().await?;
+    let already_missing = body.errors.iter().any(|e| e.code == 10006);
+    if already_missing {
+        return Ok(false);
+    }
+    let msgs: Vec<_> = body.errors.iter().map(|e| e.message.as_str()).collect();
+    anyhow::bail!(
+        "Failed to query R2 bucket '{name}' (status {status}): {}",
+        msgs.join(", ")
+    );
+}
+
 pub async fn ensure_bucket(api_token: &str, account_id: &str, name: &str) -> Result<()> {
     let client = reqwest::Client::new();
 
-    let get_url = format!("{CF_API}/accounts/{account_id}/r2/buckets/{name}");
-    let get_resp = client.get(&get_url).bearer_auth(api_token).send().await?;
-    if get_resp.status().is_success() {
+    if bucket_exists(&client, api_token, account_id, name).await? {
         return Ok(());
     }
 

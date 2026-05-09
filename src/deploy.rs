@@ -357,23 +357,14 @@ async fn ensure_r2(config_path: &str, fleet: &Fleet, app: &mut ResolvedApp) -> R
         let sp = ui::spinner("  Minting R2 API token...");
         let bucket_names: Vec<&str> = app.r2_buckets.iter().map(|b| b.name.as_str()).collect();
         let creds = r2::mint_app_token(token, account_id, &app.name, &bucket_names).await?;
-        save_app_env_secret(
+        save_app_env_secrets(
             config_path,
             &app.name,
-            "R2_ACCESS_KEY_TOKEN_ID",
-            &creds.token_id,
-        )?;
-        save_app_env_secret(
-            config_path,
-            &app.name,
-            "R2_ACCESS_KEY_ID",
-            &creds.access_key_id,
-        )?;
-        save_app_env_secret(
-            config_path,
-            &app.name,
-            "R2_SECRET_ACCESS_KEY",
-            &creds.secret_access_key,
+            &[
+                ("R2_ACCESS_KEY_TOKEN_ID", &creds.token_id),
+                ("R2_ACCESS_KEY_ID", &creds.access_key_id),
+                ("R2_SECRET_ACCESS_KEY", &creds.secret_access_key),
+            ],
         )?;
         app.env
             .insert("R2_ACCESS_KEY_TOKEN_ID".to_string(), creds.token_id);
@@ -393,7 +384,11 @@ async fn ensure_r2(config_path: &str, fleet: &Fleet, app: &mut ResolvedApp) -> R
     Ok(())
 }
 
-fn save_app_env_secret(config_path: &str, app_name: &str, key: &str, value: &str) -> Result<()> {
+pub fn save_app_env_secrets(
+    config_path: &str,
+    app_name: &str,
+    vars: &[(&str, &str)],
+) -> Result<()> {
     let env_path = Path::new(config_path).with_file_name("fleet.env.toml");
 
     let mut doc = if env_path.exists() {
@@ -418,7 +413,9 @@ fn save_app_env_secret(config_path: &str, app_name: &str, key: &str, value: &str
         .as_table_mut()
         .with_context(|| format!("[apps.{app_name}] is not a table in fleet.env.toml"))?;
 
-    app_table.insert(key, toml_edit::value(value));
+    for (key, value) in vars {
+        app_table.insert(key, toml_edit::value(*value));
+    }
 
     std::fs::write(&env_path, doc.to_string())
         .with_context(|| format!("Failed to write {}", env_path.display()))?;

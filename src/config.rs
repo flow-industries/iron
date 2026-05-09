@@ -173,6 +173,18 @@ pub struct Fleet {
     pub webhook: Option<WebhookConfig>,
 }
 
+impl Fleet {
+    pub fn apps_with_r2(&self) -> Vec<&ResolvedApp> {
+        let mut apps: Vec<&ResolvedApp> = self
+            .apps
+            .values()
+            .filter(|a| !a.r2_buckets.is_empty())
+            .collect();
+        apps.sort_by(|a, b| a.name.cmp(&b.name));
+        apps
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ResolvedApp {
     pub name: String,
