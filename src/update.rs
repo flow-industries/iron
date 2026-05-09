@@ -5,7 +5,7 @@ use crate::ui;
 const DEFAULT_GIT_URL: &str = "https://github.com/flow-industries/iron";
 const CRATE_NAME: &str = "flow-iron";
 
-pub async fn run(git: bool, git_url: Option<&str>) -> Result<()> {
+pub async fn run(crates: bool, git_url: Option<&str>) -> Result<()> {
     let cargo = tokio::process::Command::new("which")
         .arg("cargo")
         .output()
@@ -21,18 +21,16 @@ pub async fn run(git: bool, git_url: Option<&str>) -> Result<()> {
         .map(|s| s.trim().to_string())
         .context("cargo not found — install Rust via https://rustup.rs")?;
 
-    let use_git = git || git_url.is_some();
-
     let mut command = tokio::process::Command::new(&cargo);
     command.env("CARGO_NET_GIT_FETCH_WITH_CLI", "true");
 
-    if use_git {
+    if crates {
+        println!("Updating iron CLI from crates.io...\n");
+        command.args(["install", CRATE_NAME]);
+    } else {
         let url = git_url.unwrap_or(DEFAULT_GIT_URL);
         println!("Updating iron CLI from {url}...\n");
         command.args(["install", "--git", url]);
-    } else {
-        println!("Updating iron CLI from crates.io...\n");
-        command.args(["install", CRATE_NAME]);
     }
 
     let status = command

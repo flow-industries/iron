@@ -80,7 +80,7 @@ async fn main() -> Result<()> {
         }
         Command::Env { args } => iron::env::run(&cli.config, &args),
         Command::Login { command } => iron::login::run(&cli.config, command.as_ref()).await,
-        Command::Update { git, git_url } => iron::update::run(git, git_url.as_deref()).await,
+        Command::Update { crates, git_url } => iron::update::run(crates, git_url.as_deref()).await,
         Command::Version => iron::version::run(&cli.config).await,
     }
 }
