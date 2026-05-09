@@ -197,7 +197,7 @@ pub async fn mint_app_token(
 ) -> Result<R2Credentials> {
     let client = reqwest::Client::new();
 
-    let write_group_id = fetch_r2_write_permission_group_id(&client, api_token).await?;
+    let write_group_id = fetch_r2_write_permission_group_id(&client, api_token, account_id).await?;
 
     let resources: serde_json::Map<String, serde_json::Value> = bucket_names
         .iter()
@@ -262,8 +262,10 @@ pub async fn revoke_token(api_token: &str, account_id: &str, token_id: &str) -> 
 async fn fetch_r2_write_permission_group_id(
     client: &reqwest::Client,
     api_token: &str,
+    account_id: &str,
 ) -> Result<String> {
-    let url = format!("{CF_API}/user/tokens/permission_groups?scope={R2_BUCKET_SCOPE}");
+    let url =
+        format!("{CF_API}/accounts/{account_id}/tokens/permission_groups?scope={R2_BUCKET_SCOPE}");
     let resp: CfResponse<Vec<PermissionGroup>> = client
         .get(&url)
         .bearer_auth(api_token)
