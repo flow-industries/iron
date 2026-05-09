@@ -1,7 +1,9 @@
 #![allow(clippy::unwrap_used)]
 
 use iron::deploy::save_app_env_secrets;
-use iron::r2::{custom_domain_cname_target, s3_endpoint};
+use iron::r2::{
+    custom_domain_cname_target, derive_secret_access_key, r2_bucket_resource_key, s3_endpoint,
+};
 
 #[test]
 fn s3_endpoint_uses_account_subdomain() {
@@ -16,6 +18,32 @@ fn custom_domain_cname_target_format() {
     assert_eq!(
         custom_domain_cname_target("flow-media", "abc123"),
         "flow-media.abc123.r2.cloudflarestorage.com"
+    );
+}
+
+#[test]
+fn r2_bucket_resource_key_uses_default_jurisdiction() {
+    assert_eq!(
+        r2_bucket_resource_key("abc123", "flow-logs"),
+        "com.cloudflare.edge.r2.bucket.abc123_default_flow-logs"
+    );
+}
+
+#[test]
+fn derive_secret_access_key_matches_sha256_hex() {
+    // Fixed input, expected hex from openssl: echo -n "test-token-value" | sha256sum
+    let token = "test-token-value";
+    let expected = "bc6a34869b72942287fb20fdce092fc392e924b4f1986b5dfa47fbc101e2c7fb";
+    assert_eq!(derive_secret_access_key(token), expected);
+}
+
+#[test]
+fn derive_secret_access_key_is_lowercase_hex() {
+    let key = derive_secret_access_key("any-token");
+    assert_eq!(key.len(), 64);
+    assert!(
+        key.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
     );
 }
 
