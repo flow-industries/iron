@@ -391,10 +391,7 @@ tail_password = "hunter2"
         fleet.secrets.tail_url.as_deref(),
         Some("https://tail.example.com")
     );
-    assert_eq!(
-        fleet.secrets.tail_user.as_deref(),
-        Some("test@example.com")
-    );
+    assert_eq!(fleet.secrets.tail_user.as_deref(), Some("test@example.com"));
     assert_eq!(fleet.secrets.tail_password.as_deref(), Some("hunter2"));
 }
 
