@@ -6,6 +6,7 @@ pub fn generate_compose(server_name: &str, tail_user: &str, tail_password: &str)
   tail-agent:
     image: {IMAGE}
     container_name: tail-agent
+    command: ["--config", "/etc/vector/vector.toml"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./vector.toml:/etc/vector/vector.toml:ro
