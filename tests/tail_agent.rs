@@ -8,7 +8,7 @@ fn parse_tail_url_https_default_port() {
     assert_eq!(host, "tail.example.com");
     assert_eq!(port, 443);
     assert!(tls);
-    assert_eq!(uri, "/api/default/app_logs/_bulk");
+    assert_eq!(uri, "/api/default/app_logs/_multi");
 }
 
 #[test]
@@ -33,7 +33,7 @@ fn parse_tail_url_strips_path() {
     assert_eq!(host, "tail.example.com");
     assert_eq!(port, 443);
     assert!(tls);
-    assert_eq!(uri, "/api/default/app_logs/_bulk");
+    assert_eq!(uri, "/api/default/app_logs/_multi");
 }
 
 #[test]
@@ -60,17 +60,22 @@ fn generate_compose_includes_essentials() {
 
 #[test]
 fn generate_config_uses_docker_logs_source() {
-    let conf = generate_config("tail.example.com", 443, true, "/api/default/app_logs/_bulk");
+    let conf = generate_config(
+        "tail.example.com",
+        443,
+        true,
+        "/api/default/app_logs/_multi",
+    );
     assert!(conf.contains(r#"type = "docker_logs""#));
     assert!(conf.contains(r#"exclude_containers = ["tail-agent", "observe-"]"#));
     assert!(conf.contains(r#".server = get_env_var("FLOW_SERVER")"#));
-    assert!(conf.contains("uri = \"https://tail.example.com:443/api/default/app_logs/_bulk\""));
+    assert!(conf.contains("uri = \"https://tail.example.com:443/api/default/app_logs/_multi\""));
     assert!(conf.contains(r#"auth.user = "${TAIL_USER}""#));
     assert!(conf.contains(r#"compression = "gzip""#));
 }
 
 #[test]
 fn generate_config_renders_http_uri() {
-    let conf = generate_config("10.0.0.1", 5080, false, "/api/default/app_logs/_bulk");
-    assert!(conf.contains("uri = \"http://10.0.0.1:5080/api/default/app_logs/_bulk\""));
+    let conf = generate_config("10.0.0.1", 5080, false, "/api/default/app_logs/_multi");
+    assert!(conf.contains("uri = \"http://10.0.0.1:5080/api/default/app_logs/_multi\""));
 }

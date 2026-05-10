@@ -68,6 +68,6 @@ pub fn parse_tail_url(tail_url: &str) -> Option<(String, u16, bool, String)> {
     } else {
         (host_port.to_string(), if tls { 443 } else { 80 })
     };
-    let uri = "/api/default/app_logs/_bulk".to_string();
+    let uri = "/api/default/app_logs/_multi".to_string();
     Some((host, port, tls, uri))
 }
