@@ -80,6 +80,10 @@ async fn main() -> Result<()> {
         }
         Command::Env { args } => iron::env::run(&cli.config, &args),
         Command::Login { command } => iron::login::run(&cli.config, command.as_ref()).await,
+        Command::ObserveSync => {
+            let fleet = iron::config::load(&cli.config)?;
+            iron::observe_sync::run(&cli.config, &fleet).await
+        }
         Command::Update { crates, git_url } => iron::update::run(crates, git_url.as_deref()).await,
         Command::Version => iron::version::run(&cli.config).await,
     }

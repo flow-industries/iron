@@ -161,6 +161,10 @@ pub struct FleetSecrets {
     pub tail_url: Option<String>,
     pub tail_user: Option<String>,
     pub tail_password: Option<String>,
+    pub discord_webhook_url: Option<String>,
+    pub telegram_bot_token: Option<String>,
+    pub telegram_chat_id: Option<String>,
+    pub oo_rum_token: Option<String>,
     pub github_webhook_secret: Option<String>,
 }
 

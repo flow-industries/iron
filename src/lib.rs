@@ -15,6 +15,8 @@ pub mod init;
 pub mod login;
 pub mod logs;
 pub mod notify;
+pub mod observability;
+pub mod observe_sync;
 pub mod r2;
 pub mod remove;
 pub mod restart;

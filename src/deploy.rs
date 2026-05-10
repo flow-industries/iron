@@ -165,6 +165,83 @@ async fn deploy_app(
         }
     }
 
+    if app.name == "observe" {
+        sync_observability(config_path, fleet, app).await?;
+    }
+
+    Ok(())
+}
+
+async fn sync_observability(config_path: &str, fleet: &Fleet, app: &ResolvedApp) -> Result<()> {
+    let Some(routing) = app.routing.as_ref() else {
+        return Ok(());
+    };
+    let Some(domain) = routing.domains.first() else {
+        return Ok(());
+    };
+    let Some(user) = app.env.get("ZO_ROOT_USER_EMAIL") else {
+        return Ok(());
+    };
+    let Some(password) = app.env.get("ZO_ROOT_USER_PASSWORD") else {
+        return Ok(());
+    };
+
+    let hub_url = format!("https://{domain}");
+    let sp = ui::spinner("  Syncing observability config...");
+    let out = crate::observability::sync(&crate::observability::SyncInput {
+        hub_url: &hub_url,
+        user,
+        password,
+        discord_webhook_url: fleet.secrets.discord_webhook_url.as_deref(),
+        telegram_bot_token: fleet.secrets.telegram_bot_token.as_deref(),
+        telegram_chat_id: fleet.secrets.telegram_chat_id.as_deref(),
+    })
+    .await?;
+    sp.finish_and_clear();
+
+    let mut details = Vec::new();
+    if fleet
+        .secrets
+        .discord_webhook_url
+        .as_deref()
+        .is_some_and(|s| !s.is_empty())
+    {
+        details.push("discord");
+    }
+    if fleet
+        .secrets
+        .telegram_bot_token
+        .as_deref()
+        .is_some_and(|s| !s.is_empty())
+        && fleet
+            .secrets
+            .telegram_chat_id
+            .as_deref()
+            .is_some_and(|s| !s.is_empty())
+    {
+        details.push("telegram");
+    }
+    let summary = if details.is_empty() {
+        "no destinations configured".to_string()
+    } else {
+        format!("destinations: {}", details.join(", "))
+    };
+    ui::success(&format!("  Observability synced ({summary})"));
+
+    if let Some(rum_token) = out.rum_token {
+        let prev = fleet.secrets.oo_rum_token.as_deref().unwrap_or("");
+        if prev != rum_token {
+            crate::login::save_fleet_secret(
+                std::path::Path::new(config_path)
+                    .with_file_name("fleet.env.toml")
+                    .as_path(),
+                "oo_rum_token",
+                &rum_token,
+            )?;
+            ui::success(&format!("  RUM token saved to fleet.env.toml: {rum_token}"));
+        }
+    }
+
     Ok(())
 }
 

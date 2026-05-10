@@ -149,6 +149,9 @@ pub enum Command {
         args: Vec<String>,
     },
 
+    /// Reconcile observability config (alerts, destinations, RUM token) with the `OpenObserve` hub
+    ObserveSync,
+
     /// Update iron CLI to the latest version (from upstream git by default)
     Update {
         /// Install from crates.io instead of git (lags behind upstream main)
