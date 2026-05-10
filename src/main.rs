@@ -84,6 +84,30 @@ async fn main() -> Result<()> {
             let fleet = iron::config::load(&cli.config)?;
             iron::observe_sync::run(&cli.config, &fleet).await
         }
+        Command::Tail {
+            app,
+            server,
+            level,
+            stream,
+            since,
+            limit,
+            follow,
+        } => {
+            let fleet = iron::config::load(&cli.config)?;
+            iron::tail::run(
+                &fleet,
+                iron::tail::TailOpts {
+                    apps: app,
+                    servers: server,
+                    level,
+                    stream,
+                    since,
+                    limit,
+                    follow,
+                },
+            )
+            .await
+        }
         Command::Update { crates, git_url } => iron::update::run(crates, git_url.as_deref()).await,
         Command::Version => iron::version::run(&cli.config).await,
     }

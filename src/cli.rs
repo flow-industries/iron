@@ -152,6 +152,38 @@ pub enum Command {
     /// Reconcile observability config (alerts, destinations, RUM token) with the `OpenObserve` hub
     ObserveSync,
 
+    /// Tail logs from the OpenObserve hub
+    #[allow(clippy::doc_markdown)]
+    Tail {
+        /// Filter by app name (repeatable, matches container_name prefix)
+        #[arg(long, short)]
+        app: Vec<String>,
+
+        /// Filter by server name (repeatable)
+        #[arg(long, short)]
+        server: Vec<String>,
+
+        /// Filter by log level (info, warn, error, debug)
+        #[arg(long, short)]
+        level: Option<String>,
+
+        /// Stream name (e.g. app_logs, flow_events)
+        #[arg(long, default_value = "app_logs")]
+        stream: String,
+
+        /// Lookback window (e.g. 30s, 5m, 1h, 1d)
+        #[arg(long, default_value = "5m")]
+        since: String,
+
+        /// Max events to fetch in one-shot mode
+        #[arg(long, default_value_t = 200)]
+        limit: u32,
+
+        /// Follow log output (poll continuously)
+        #[arg(short, long)]
+        follow: bool,
+    },
+
     /// Update iron CLI to the latest version (from upstream git by default)
     Update {
         /// Install from crates.io instead of git (lags behind upstream main)
