@@ -106,6 +106,13 @@ async fn deploy_app(
 
     let mut app = app.clone();
     ensure_r2(config_path, fleet, &mut app).await?;
+    if app.name == "observe" {
+        let origins = collect_frontend_origins(fleet);
+        if !origins.is_empty() {
+            app.env
+                .insert("ZO_CORS_ALLOWED_ORIGINS".to_string(), origins);
+        }
+    }
     let app = &app;
 
     let compose_yaml = compose::generate(app, &fleet.network);
@@ -170,6 +177,19 @@ async fn deploy_app(
     }
 
     Ok(())
+}
+
+fn collect_frontend_origins(fleet: &Fleet) -> String {
+    let mut origins: Vec<String> = fleet
+        .apps
+        .values()
+        .filter_map(|a| a.routing.as_ref())
+        .flat_map(|r| r.domains.iter())
+        .map(|d| format!("https://{d}"))
+        .collect();
+    origins.sort();
+    origins.dedup();
+    origins.join(",")
 }
 
 async fn sync_observability(config_path: &str, fleet: &Fleet, app: &ResolvedApp) -> Result<()> {
