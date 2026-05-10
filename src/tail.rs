@@ -312,11 +312,27 @@ fn print_hit(h: &HashMap<String, Value>) {
         })
         .unwrap_or_default();
 
-    let action = h.get("action").and_then(Value::as_str);
-    let body = match (action, msg.as_str()) {
-        (Some(a), "") => style(a).bold().to_string(),
-        (Some(a), m) => format!("{} {m}", style(a).bold()),
-        (None, m) => m.to_string(),
+    let is_access_log = h
+        .get("logger")
+        .and_then(Value::as_str)
+        .is_some_and(|s| s.starts_with("http.log.access"));
+
+    let body = if is_access_log {
+        let method = h
+            .get("request_method")
+            .and_then(Value::as_str)
+            .unwrap_or("?");
+        let uri = h.get("request_uri").and_then(Value::as_str).unwrap_or("");
+        let status = h.get("status").and_then(Value::as_i64).unwrap_or(0);
+        let dur_ms = h.get("duration").and_then(Value::as_f64).unwrap_or(0.0) * 1000.0;
+        format!("{method} {uri} {status} {dur_ms:.1}ms")
+    } else {
+        let action = h.get("action").and_then(Value::as_str);
+        match (action, msg.as_str()) {
+            (Some(a), "") => style(a).bold().to_string(),
+            (Some(a), m) => format!("{} {m}", style(a).bold()),
+            (None, m) => m.to_string(),
+        }
     };
 
     println!(
