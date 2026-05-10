@@ -119,7 +119,7 @@ async fn check_server(
         .as_deref()
         .is_some_and(|s| !s.is_empty())
     {
-        issues.extend(check_fluentbit(pool, server).await?);
+        issues.extend(check_tail_agent(pool, server).await?);
     }
 
     if let Some(token) = fleet.secrets.gh_token.as_deref() {
@@ -261,7 +261,7 @@ async fn check_stale(
                 && *l != "caddy"
                 && *l != "watcher"
                 && *l != "webhook"
-                && *l != "fluent-bit"
+                && *l != "tail-agent"
         })
         .collect();
 
@@ -289,11 +289,11 @@ async fn check_stale(
     Ok(issues)
 }
 
-async fn check_fluentbit(pool: &SshPool, server: &str) -> Result<Vec<String>> {
+async fn check_tail_agent(pool: &SshPool, server: &str) -> Result<Vec<String>> {
     let output = pool
         .exec(
             server,
-            "docker ps --filter 'name=^/fluent-bit$' --format '{{.Names}}\t{{.Status}}'",
+            "docker ps --filter 'name=^/tail-agent$' --format '{{.Names}}\t{{.Status}}'",
         )
         .await
         .unwrap_or_default();
@@ -303,14 +303,14 @@ async fn check_fluentbit(pool: &SshPool, server: &str) -> Result<Vec<String>> {
     if let Some(line) = entry {
         let status = line.split_once('\t').map_or(line, |(_, s)| s);
         if status.starts_with("Up") {
-            ui::success("fluent-bit running");
+            ui::success("tail-agent running");
         } else {
-            let msg = format!("fluent-bit not running ({status})");
+            let msg = format!("tail-agent not running ({status})");
             ui::error(&msg);
             issues.push(msg);
         }
     } else {
-        let msg = "fluent-bit missing".to_string();
+        let msg = "tail-agent missing".to_string();
         ui::error(&msg);
         issues.push(msg);
     }

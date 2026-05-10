@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use iron::fluentbit::{generate_compose, generate_config, parse_tail_url};
+use iron::tail_agent::{generate_compose, generate_config, parse_tail_url};
 
 #[test]
 fn parse_tail_url_https_default_port() {
@@ -49,32 +49,28 @@ fn parse_tail_url_rejects_no_scheme() {
 #[test]
 fn generate_compose_includes_essentials() {
     let yaml = generate_compose("fl-1", "test@example.com", "hunter2");
-    assert!(yaml.contains("fluent/fluent-bit:"));
+    assert!(yaml.contains("timberio/vector:"));
+    assert!(yaml.contains("container_name: tail-agent"));
     assert!(yaml.contains("FLOW_SERVER: fl-1"));
     assert!(yaml.contains("TAIL_USER: test@example.com"));
     assert!(yaml.contains("TAIL_PASSWORD: hunter2"));
-    assert!(yaml.contains("/var/lib/docker/containers"));
     assert!(yaml.contains("/var/run/docker.sock"));
     assert!(yaml.contains("flow.watch=false"));
 }
 
 #[test]
-fn generate_config_includes_essentials() {
+fn generate_config_uses_docker_logs_source() {
     let conf = generate_config("tail.example.com", 443, true, "/api/default/app_logs/_json");
-    assert!(conf.contains("Name              tail"));
-    assert!(conf.contains("Path              /var/lib/docker/containers/*/*-json.log"));
-    assert!(conf.contains("Host              tail.example.com"));
-    assert!(conf.contains("Port              443"));
-    assert!(conf.contains("URI               /api/default/app_logs/_json"));
-    assert!(conf.contains("tls               On"));
-    assert!(conf.contains("Record            server ${FLOW_SERVER}"));
-    assert!(conf.contains("http_user         ${TAIL_USER}"));
+    assert!(conf.contains(r#"type = "docker_logs""#));
+    assert!(conf.contains(r#"exclude_containers = ["tail-agent", "observe-"]"#));
+    assert!(conf.contains(r#".server = get_env_var("FLOW_SERVER")"#));
+    assert!(conf.contains("uri = \"https://tail.example.com:443/api/default/app_logs/_json\""));
+    assert!(conf.contains(r#"auth.user = "${TAIL_USER}""#));
+    assert!(conf.contains(r#"compression = "gzip""#));
 }
 
 #[test]
-fn generate_config_renders_tls_off_for_http() {
+fn generate_config_renders_http_uri() {
     let conf = generate_config("10.0.0.1", 5080, false, "/api/default/app_logs/_json");
-    assert!(conf.contains("tls               Off"));
-    assert!(conf.contains("Host              10.0.0.1"));
-    assert!(conf.contains("Port              5080"));
+    assert!(conf.contains("uri = \"http://10.0.0.1:5080/api/default/app_logs/_json\""));
 }
