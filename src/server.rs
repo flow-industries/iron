@@ -450,6 +450,40 @@ pub async fn deploy_infra(
         ui::success("Caddy started");
     }
 
+    if let (Some(url), Some(user), Some(password)) = (
+        secrets.tail_url.as_deref().filter(|s| !s.is_empty()),
+        secrets.tail_user.as_deref().filter(|s| !s.is_empty()),
+        secrets.tail_password.as_deref().filter(|s| !s.is_empty()),
+    ) {
+        if let Some((host, port, tls, uri)) = crate::fluentbit::parse_tail_url(url) {
+            let sp = ui::spinner("Setting up Fluent Bit...");
+            pool.exec(server_name, "mkdir -p /opt/flow/fluent-bit")
+                .await?;
+            let compose = crate::fluentbit::generate_compose(server_name, user, password);
+            pool.upload_file(
+                server_name,
+                "/opt/flow/fluent-bit/docker-compose.yml",
+                &compose,
+            )
+            .await?;
+            let config = crate::fluentbit::generate_config(&host, port, tls, &uri);
+            pool.upload_file(server_name, "/opt/flow/fluent-bit/fluent-bit.conf", &config)
+                .await?;
+            pool.exec(
+                server_name,
+                "cd /opt/flow/fluent-bit && docker compose up -d",
+            )
+            .await?;
+            pool.exec(
+                server_name,
+                "cd /opt/flow/fluent-bit && docker compose restart fluent-bit",
+            )
+            .await?;
+            sp.finish_and_clear();
+            ui::success(&format!("Fluent Bit started → {host}{uri}"));
+        }
+    }
+
     if let Some(cfg) = webhook.filter(|w| w.server == server_name) {
         let secret = secrets
             .github_webhook_secret

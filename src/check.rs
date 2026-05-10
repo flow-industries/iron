@@ -113,6 +113,15 @@ async fn check_server(
         issues.extend(check_watcher(pool, server).await?);
     }
 
+    if fleet
+        .secrets
+        .tail_url
+        .as_deref()
+        .is_some_and(|s| !s.is_empty())
+    {
+        issues.extend(check_fluentbit(pool, server).await?);
+    }
+
     if let Some(token) = fleet.secrets.gh_token.as_deref() {
         issues.extend(check_runners(http, token, fleet, server).await);
     }
@@ -269,6 +278,35 @@ async fn check_stale(
     if !found_stale && !on_disk.is_empty() {
         println!();
         ui::success("no stale apps");
+    }
+
+    Ok(issues)
+}
+
+async fn check_fluentbit(pool: &SshPool, server: &str) -> Result<Vec<String>> {
+    let output = pool
+        .exec(
+            server,
+            "docker ps --filter 'name=^/fluent-bit$' --format '{{.Names}}\t{{.Status}}'",
+        )
+        .await
+        .unwrap_or_default();
+
+    let mut issues = Vec::new();
+    let entry = output.lines().find(|l| !l.is_empty());
+    if let Some(line) = entry {
+        let status = line.split_once('\t').map_or(line, |(_, s)| s);
+        if status.starts_with("Up") {
+            ui::success("fluent-bit running");
+        } else {
+            let msg = format!("fluent-bit not running ({status})");
+            ui::error(&msg);
+            issues.push(msg);
+        }
+    } else {
+        let msg = "fluent-bit missing".to_string();
+        ui::error(&msg);
+        issues.push(msg);
     }
 
     Ok(issues)
