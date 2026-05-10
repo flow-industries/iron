@@ -1,5 +1,16 @@
 use crate::config::ResolvedApp;
 
+pub const BASE_CADDYFILE: &str = "{
+    log default {
+        output stdout
+        format json
+        level INFO
+    }
+}
+
+import /etc/caddy/sites/*
+";
+
 pub fn generate(app: &ResolvedApp) -> Option<String> {
     let routing = app.routing.as_ref()?;
     let port = app.port?;

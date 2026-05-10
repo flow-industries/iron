@@ -401,8 +401,20 @@ pub async fn deploy_infra(
     )
     .await?;
 
+    pool.upload_file(
+        server_name,
+        "/opt/flow/caddy/Caddyfile",
+        crate::caddy::BASE_CADDYFILE,
+    )
+    .await?;
+
     pool.exec(server_name, "cd /opt/flow/caddy && docker compose up -d")
         .await?;
+    pool.exec(
+        server_name,
+        "cd /opt/flow/caddy && docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null || true",
+    )
+    .await?;
 
     if has_ghcr_apps {
         let gh_username = secrets.gh_username.as_deref().filter(|s| !s.is_empty());
