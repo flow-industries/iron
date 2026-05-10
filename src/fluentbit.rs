@@ -37,6 +37,7 @@ pub fn generate_config(host: &str, port: u16, tls: bool, uri: &str) -> String {
 [INPUT]
     Name              tail
     Path              /var/lib/docker/containers/*/*-json.log
+    Path_Key          source
     Parser            docker
     Tag               docker.*
     Refresh_Interval  5
