@@ -39,6 +39,12 @@ type = "remap"
 inputs = ["docker"]
 source = '''
 .server = get_env_var("FLOW_SERVER") ?? "?"
+
+parsed, err = parse_json(string!(.message))
+if err == null && is_object(parsed) {{
+    . = merge(object!(parsed), ., deep: false)
+    del(.message)
+}}
 '''
 
 [sinks.observe]
