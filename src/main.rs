@@ -94,13 +94,18 @@ async fn main() -> Result<()> {
             follow,
         } => {
             let fleet = iron::config::load(&cli.config)?;
+            let streams = if stream.is_empty() {
+                vec!["app_logs".to_string(), "flow_events".to_string()]
+            } else {
+                stream
+            };
             iron::tail::run(
                 &fleet,
                 iron::tail::TailOpts {
                     apps: app,
                     servers: server,
                     level,
-                    stream,
+                    streams,
                     since,
                     limit,
                     follow,

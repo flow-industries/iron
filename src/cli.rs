@@ -167,9 +167,9 @@ pub enum Command {
         #[arg(long, short)]
         level: Option<String>,
 
-        /// Stream name (e.g. app_logs, flow_events)
-        #[arg(long, default_value = "app_logs")]
-        stream: String,
+        /// Stream name (repeatable; default: app_logs and flow_events)
+        #[arg(long)]
+        stream: Vec<String>,
 
         /// Lookback window (e.g. 30s, 5m, 1h, 1d)
         #[arg(long, default_value = "5m")]
