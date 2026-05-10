@@ -22,6 +22,7 @@ fn generate_caddy_fragment() {
         services: vec![],
         ports: vec![],
         r2_buckets: vec![],
+        volumes: vec![],
     };
     let fragment = generate(&app).unwrap();
     assert!(fragment.contains("flow.industries {"));
@@ -45,6 +46,7 @@ fn no_fragment_without_routing() {
         services: vec![],
         ports: vec![],
         r2_buckets: vec![],
+        volumes: vec![],
     };
     assert!(generate(&app).is_none());
 }
@@ -66,6 +68,7 @@ fn multiple_domains() {
         services: vec![],
         ports: vec![],
         r2_buckets: vec![],
+        volumes: vec![],
     };
     let fragment = generate(&app).unwrap();
     assert!(fragment.contains("flow.talk {"));
@@ -90,6 +93,7 @@ fn no_health_check_without_health_path() {
         services: vec![],
         ports: vec![],
         r2_buckets: vec![],
+        volumes: vec![],
     };
     let fragment = generate(&app).unwrap();
     assert!(fragment.contains("server.flow.game {"));

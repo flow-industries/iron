@@ -37,6 +37,13 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
     } else {
         "rolling"
     };
+    if !app.volumes.is_empty() {
+        out.push_str("    volumes:\n");
+        for vol in &app.volumes {
+            out.push_str(&format!("      - {vol}\n"));
+        }
+    }
+
     out.push_str("    labels:\n");
     out.push_str("      - \"flow.watch=true\"\n");
     out.push_str(&format!("      - \"flow.strategy={strategy}\"\n"));
@@ -125,14 +132,20 @@ pub fn generate(app: &ResolvedApp, network: &str) -> String {
     }
 
     let mut named_volumes: Vec<String> = Vec::new();
+    let collect_named = |vol: &str, named: &mut Vec<String>| {
+        if let Some(name) = vol.split(':').next() {
+            let is_named_volume = !name.contains('/') && !name.starts_with('.');
+            if is_named_volume && !named.contains(&name.to_string()) {
+                named.push(name.to_string());
+            }
+        }
+    };
+    for vol in &app.volumes {
+        collect_named(vol, &mut named_volumes);
+    }
     for svc in &app.services {
         for vol in &svc.volumes {
-            if let Some(name) = vol.split(':').next() {
-                let is_named_volume = !name.contains('/') && !name.starts_with('.');
-                if is_named_volume && !named_volumes.contains(&name.to_string()) {
-                    named_volumes.push(name.to_string());
-                }
-            }
+            collect_named(vol, &mut named_volumes);
         }
     }
     if !named_volumes.is_empty() {

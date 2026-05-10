@@ -19,6 +19,7 @@ fn simple_app() -> ResolvedApp {
         services: vec![],
         ports: vec![],
         r2_buckets: vec![],
+        volumes: vec![],
     }
 }
 
@@ -59,6 +60,7 @@ fn generate_with_ports() {
             protocol: "tcp".to_string(),
         }],
         r2_buckets: vec![],
+        volumes: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("\"9999:9999\""));
@@ -99,6 +101,7 @@ fn generate_with_sidecars() {
         ],
         ports: vec![],
         r2_buckets: vec![],
+        volumes: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("postgres:"));
@@ -141,6 +144,7 @@ fn generate_env_file() {
         }],
         ports: vec![],
         r2_buckets: vec![],
+        volumes: vec![],
     };
     let env = generate_env(&app);
     assert!(env.contains("DB_PASSWORD=secret123"));
@@ -182,6 +186,7 @@ fn compose_uses_env_file_not_shell_interpolation() {
         }],
         ports: vec![],
         r2_buckets: vec![],
+        volumes: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("env_file:\n      - .env"));
@@ -209,4 +214,19 @@ fn generate_env_hides_admin_only_keys() {
     assert!(env.contains("PORT=3000"));
     assert!(!env.contains("R2_ACCESS_KEY_TOKEN_ID"));
     assert!(!env.contains("internal-token-id"));
+}
+
+#[test]
+fn generate_with_app_volumes() {
+    let mut app = simple_app();
+    app.volumes = vec![
+        "openobserve-data:/data".to_string(),
+        "/host/path:/in/container:ro".to_string(),
+    ];
+    let output = generate(&app, "flow");
+    assert!(output.contains("    volumes:\n"));
+    assert!(output.contains("      - openobserve-data:/data\n"));
+    assert!(output.contains("      - /host/path:/in/container:ro\n"));
+    assert!(output.contains("\nvolumes:\n  openobserve-data:\n"));
+    assert!(!output.contains("\nvolumes:\n  /host/path:\n"));
 }
