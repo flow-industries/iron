@@ -15,7 +15,7 @@ pub struct TailOpts {
     pub apps: Vec<String>,
     pub servers: Vec<String>,
     pub level: Option<String>,
-    pub stream: String,
+    pub streams: Vec<String>,
     pub since: String,
     pub limit: u32,
     pub follow: bool,
@@ -46,6 +46,10 @@ pub async fn run(fleet: &Fleet, opts: TailOpts) -> Result<()> {
         .get("ZO_ROOT_USER_PASSWORD")
         .context("ZO_ROOT_USER_PASSWORD missing in [apps.observe] env")?;
 
+    if opts.streams.is_empty() {
+        bail!("no streams specified");
+    }
+
     let base = format!("https://{domain}");
     let where_clause = build_where(&opts);
     let client = reqwest::Client::new();
@@ -54,52 +58,112 @@ pub async fn run(fleet: &Fleet, opts: TailOpts) -> Result<()> {
     if !opts.follow {
         let end_us = now_us();
         let start_us = end_us.saturating_sub(lookback_us);
-        let hits = search(
+        let merged = fan_out_search(
             &client,
             &base,
             user,
             password,
-            &opts.stream,
+            &opts.streams,
             &where_clause,
             start_us,
             end_us,
             opts.limit,
         )
         .await?;
-        for h in hits.iter().rev() {
+        for (_, h) in &merged {
             print_hit(h);
         }
         return Ok(());
     }
 
-    let mut cursor = now_us().saturating_sub(lookback_us);
+    let initial_cursor = now_us().saturating_sub(lookback_us);
+    let mut cursors: Vec<u128> = vec![initial_cursor; opts.streams.len()];
     loop {
         let end_us = now_us();
-        if cursor < end_us {
-            let hits = search(
+        let mut tasks = Vec::with_capacity(opts.streams.len());
+        for (i, stream) in opts.streams.iter().enumerate() {
+            let cursor = cursors[i];
+            if cursor >= end_us {
+                tasks.push(None);
+                continue;
+            }
+            tasks.push(Some(search(
                 &client,
                 &base,
                 user,
                 password,
-                &opts.stream,
+                stream,
                 &where_clause,
                 cursor,
                 end_us,
                 1000,
-            )
-            .await?;
-            for h in hits.iter().rev() {
-                print_hit(h);
-                if let Some(ts) = h.get("_timestamp").and_then(Value::as_i64) {
-                    let ts_u = u128::try_from(ts).unwrap_or(0);
-                    if ts_u >= cursor {
-                        cursor = ts_u + 1;
+            )));
+        }
+
+        let mut merged: Vec<(usize, HashMap<String, Value>)> = Vec::new();
+        let active: Vec<_> = tasks
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, t)| t.map(|t| (i, t)))
+            .collect();
+        let (idxs, futs): (Vec<_>, Vec<_>) = active.into_iter().unzip();
+        let results = futures::future::join_all(futs).await;
+        for (i, result) in idxs.into_iter().zip(results.into_iter()) {
+            for h in result? {
+                merged.push((i, h));
+            }
+        }
+        merged.sort_by_key(|(_, h)| h.get("_timestamp").and_then(Value::as_i64).unwrap_or(0));
+
+        for (stream_idx, h) in &merged {
+            print_hit(h);
+            if let Some(ts) = h.get("_timestamp").and_then(Value::as_i64) {
+                if let Ok(ts_u) = u128::try_from(ts) {
+                    if ts_u >= cursors[*stream_idx] {
+                        cursors[*stream_idx] = ts_u + 1;
                     }
                 }
             }
         }
+
         tokio::time::sleep(POLL_INTERVAL).await;
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn fan_out_search(
+    client: &reqwest::Client,
+    base: &str,
+    user: &str,
+    password: &str,
+    streams: &[String],
+    where_clause: &str,
+    start_us: u128,
+    end_us: u128,
+    limit: u32,
+) -> Result<Vec<(usize, HashMap<String, Value>)>> {
+    let futs = streams.iter().map(|stream| {
+        search(
+            client,
+            base,
+            user,
+            password,
+            stream,
+            where_clause,
+            start_us,
+            end_us,
+            limit,
+        )
+    });
+    let results = futures::future::join_all(futs).await;
+    let mut merged: Vec<(usize, HashMap<String, Value>)> = Vec::new();
+    for (i, result) in results.into_iter().enumerate() {
+        for h in result? {
+            merged.push((i, h));
+        }
+    }
+    merged.sort_by_key(|(_, h)| h.get("_timestamp").and_then(Value::as_i64).unwrap_or(0));
+    Ok(merged)
 }
 
 fn build_where(opts: &TailOpts) -> String {
@@ -221,17 +285,23 @@ fn print_hit(h: &HashMap<String, Value>) {
     let level_styled = match level.as_str() {
         "error" | "err" | "fatal" => style(level_label).red().bold().to_string(),
         "warn" | "warning" => style(level_label).yellow().to_string(),
+        "success" => style(level_label).green().to_string(),
         "info" => style(level_label).cyan().to_string(),
         "debug" | "trace" => style(level_label).dim().to_string(),
         _ => level_label,
     };
 
     let server = h.get("server").and_then(Value::as_str).unwrap_or("?");
-    let container = h
-        .get("container_name")
+    let app = h
+        .get("app")
         .and_then(Value::as_str)
-        .unwrap_or("?");
-    let app = container.split('-').next().unwrap_or(container);
+        .map(ToString::to_string)
+        .or_else(|| {
+            h.get("container_name")
+                .and_then(Value::as_str)
+                .map(|c| c.split('-').next().unwrap_or(c).to_string())
+        })
+        .unwrap_or_else(|| "?".to_string());
 
     let msg = h
         .get("msg")
@@ -242,12 +312,19 @@ fn print_hit(h: &HashMap<String, Value>) {
         })
         .unwrap_or_default();
 
+    let action = h.get("action").and_then(Value::as_str);
+    let body = match (action, msg.as_str()) {
+        (Some(a), "") => style(a).bold().to_string(),
+        (Some(a), m) => format!("{} {m}", style(a).bold()),
+        (None, m) => m.to_string(),
+    };
+
     println!(
         "{} {} {} {}",
         style(ts_str).dim(),
         level_styled,
         style(format!("{server}/{app}")).magenta(),
-        msg
+        body
     );
 }
 
@@ -261,7 +338,7 @@ mod tests {
             apps: vec![],
             servers: vec![],
             level: None,
-            stream: "app_logs".into(),
+            streams: vec!["app_logs".into()],
             since: "5m".into(),
             limit: 100,
             follow: false,
@@ -275,7 +352,7 @@ mod tests {
             apps: vec!["paper".into(), "auth".into()],
             servers: vec!["fl-1".into()],
             level: Some("error".into()),
-            stream: "app_logs".into(),
+            streams: vec!["app_logs".into()],
             since: "5m".into(),
             limit: 100,
             follow: false,
@@ -292,7 +369,7 @@ mod tests {
             apps: vec!["a'b".into()],
             servers: vec![],
             level: None,
-            stream: "app_logs".into(),
+            streams: vec!["app_logs".into()],
             since: "5m".into(),
             limit: 100,
             follow: false,
