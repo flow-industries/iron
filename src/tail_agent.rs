@@ -47,9 +47,32 @@ if err == null && is_object(parsed) {{
 }}
 '''
 
+[transforms.drop_noise]
+type = "filter"
+inputs = ["tag"]
+condition = '''
+logger = string(.logger) ?? ""
+status = to_int(.status) ?? 0
+if starts_with(logger, "http.log.access") && status > 0 && status < 400 {{
+    false
+}} else {{
+    uri = string(.request_uri) ?? ""
+    if uri == "/health" || uri == "/healthz" {{
+        false
+    }} else {{
+        msg = string(.message) ?? ""
+        if contains(msg, " /health ") || contains(msg, " /healthz ") {{
+            false
+        }} else {{
+            true
+        }}
+    }}
+}}
+'''
+
 [sinks.observe]
 type = "http"
-inputs = ["tag"]
+inputs = ["drop_noise"]
 uri = "{scheme}://{host}:{port}{uri}"
 encoding.codec = "json"
 framing.method = "newline_delimited"
