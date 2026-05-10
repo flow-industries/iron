@@ -50,24 +50,19 @@ if err == null && is_object(parsed) {{
 [transforms.drop_noise]
 type = "filter"
 inputs = ["tag"]
-condition = '''
-logger = string(.logger) ?? ""
-status = to_int(.status) ?? 0
-if starts_with(logger, "http.log.access") && status > 0 && status < 400 {{
-    false
-}} else {{
-    uri = string(.request_uri) ?? ""
-    if uri == "/health" || uri == "/healthz" {{
-        false
-    }} else {{
-        msg = string(.message) ?? ""
-        if contains(msg, " /health ") || contains(msg, " /healthz ") {{
-            false
-        }} else {{
-            true
-        }}
-    }}
-}}
+
+[transforms.drop_noise.condition]
+type = "vrl"
+source = '''
+logger = to_string(.logger) ?? ""
+msg = to_string(.message) ?? ""
+uri = to_string(.request_uri) ?? ""
+
+is_caddy_access = starts_with(logger, "http.log.access")
+is_nginx_health = contains(msg, " /health ") || contains(msg, " /healthz ")
+is_health_req = uri == "/health" || uri == "/healthz"
+
+!(is_caddy_access || is_nginx_health || is_health_req)
 '''
 
 [sinks.observe]
