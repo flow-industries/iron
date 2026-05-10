@@ -455,32 +455,40 @@ pub async fn deploy_infra(
         secrets.tail_user.as_deref().filter(|s| !s.is_empty()),
         secrets.tail_password.as_deref().filter(|s| !s.is_empty()),
     ) {
-        if let Some((host, port, tls, uri)) = crate::fluentbit::parse_tail_url(url) {
-            let sp = ui::spinner("Setting up Fluent Bit...");
-            pool.exec(server_name, "mkdir -p /opt/flow/fluent-bit")
+        if let Some((host, port, tls, uri)) = crate::tail_agent::parse_tail_url(url) {
+            let sp = ui::spinner("Setting up tail-agent...");
+            pool.exec(
+                server_name,
+                "if [ -d /opt/flow/fluent-bit ]; then \
+                   cd /opt/flow/fluent-bit && docker compose down -v 2>/dev/null || true; \
+                   rm -rf /opt/flow/fluent-bit; \
+                 fi",
+            )
+            .await?;
+            pool.exec(server_name, "mkdir -p /opt/flow/tail-agent")
                 .await?;
-            let compose = crate::fluentbit::generate_compose(server_name, user, password);
+            let compose = crate::tail_agent::generate_compose(server_name, user, password);
             pool.upload_file(
                 server_name,
-                "/opt/flow/fluent-bit/docker-compose.yml",
+                "/opt/flow/tail-agent/docker-compose.yml",
                 &compose,
             )
             .await?;
-            let config = crate::fluentbit::generate_config(&host, port, tls, &uri);
-            pool.upload_file(server_name, "/opt/flow/fluent-bit/fluent-bit.conf", &config)
+            let config = crate::tail_agent::generate_config(&host, port, tls, &uri);
+            pool.upload_file(server_name, "/opt/flow/tail-agent/vector.toml", &config)
                 .await?;
             pool.exec(
                 server_name,
-                "cd /opt/flow/fluent-bit && docker compose up -d",
+                "cd /opt/flow/tail-agent && docker compose up -d",
             )
             .await?;
             pool.exec(
                 server_name,
-                "cd /opt/flow/fluent-bit && docker compose restart fluent-bit",
+                "cd /opt/flow/tail-agent && docker compose restart tail-agent",
             )
             .await?;
             sp.finish_and_clear();
-            ui::success(&format!("Fluent Bit started → {host}{uri}"));
+            ui::success(&format!("tail-agent started → {host}{uri}"));
         }
     }
 
