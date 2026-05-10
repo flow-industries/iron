@@ -256,7 +256,13 @@ async fn check_stale(
 
     let on_disk: Vec<&str> = output
         .lines()
-        .filter(|l| !l.is_empty() && *l != "caddy" && *l != "watcher" && *l != "webhook")
+        .filter(|l| {
+            !l.is_empty()
+                && *l != "caddy"
+                && *l != "watcher"
+                && *l != "webhook"
+                && *l != "fluent-bit"
+        })
         .collect();
 
     let mut issues = Vec::new();

@@ -49,15 +49,6 @@ pub fn generate_config(host: &str, port: u16, tls: bool, uri: &str) -> String {
     Match             docker.*
     Record            server ${{FLOW_SERVER}}
 
-[FILTER]
-    Name              docker_metadata
-    Match             docker.*
-
-[FILTER]
-    Name              grep
-    Match             docker.*
-    Exclude           container_name ^(/?)(observe-observe-|fluent-bit$)
-
 [OUTPUT]
     Name              http
     Match             docker.*

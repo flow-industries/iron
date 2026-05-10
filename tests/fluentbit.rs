@@ -68,7 +68,6 @@ fn generate_config_includes_essentials() {
     assert!(conf.contains("URI               /api/default/app_logs/_json"));
     assert!(conf.contains("tls               On"));
     assert!(conf.contains("Record            server ${FLOW_SERVER}"));
-    assert!(conf.contains("Exclude           container_name"));
     assert!(conf.contains("http_user         ${TAIL_USER}"));
 }
 

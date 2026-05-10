@@ -6,7 +6,7 @@ use crate::ssh::SshPool;
 use crate::ui;
 
 pub async fn run(fleet: &Fleet, app_name: &str, follow: bool, server: Option<&str>) -> Result<()> {
-    let is_infra = app_name == "watcher" || app_name == "caddy" || app_name == "webhook";
+    let is_infra = matches!(app_name, "watcher" | "caddy" | "webhook" | "fluent-bit");
 
     let (server_name, dir_name) = if let Some(runner) = fleet.runners.get(app_name) {
         let s = if let Some(s) = server {
