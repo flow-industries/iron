@@ -10,6 +10,7 @@ pub mod config;
 pub mod db;
 pub mod deploy;
 pub mod env;
+pub mod fluentbit;
 pub mod ghcr;
 pub mod init;
 pub mod login;
