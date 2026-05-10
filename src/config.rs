@@ -61,6 +61,8 @@ pub struct App {
     pub ports: Vec<PortMapping>,
     #[serde(default)]
     pub r2_buckets: Vec<R2Bucket>,
+    #[serde(default)]
+    pub volumes: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -197,6 +199,7 @@ pub struct ResolvedApp {
     pub services: Vec<ResolvedSidecar>,
     pub ports: Vec<PortMapping>,
     pub r2_buckets: Vec<R2Bucket>,
+    pub volumes: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -492,6 +495,7 @@ pub fn load(config_path: &str) -> Result<Fleet> {
                 services: resolved_services,
                 ports: app.ports,
                 r2_buckets: app.r2_buckets,
+                volumes: app.volumes,
             },
         );
     }
