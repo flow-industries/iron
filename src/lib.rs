@@ -25,6 +25,7 @@ pub mod server;
 pub mod ssh;
 pub mod status;
 pub mod stop;
+pub mod tail;
 pub mod tail_agent;
 pub mod ui;
 pub mod update;
