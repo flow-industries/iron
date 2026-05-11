@@ -51,7 +51,6 @@ pub async fn run(fleet: &Fleet, opts: TailOpts) -> Result<()> {
     }
 
     let base = format!("https://{domain}");
-    let where_clause = build_where(&opts);
     let client = reqwest::Client::new();
     let lookback_us = parse_duration_us(&opts.since)?;
 
@@ -64,7 +63,7 @@ pub async fn run(fleet: &Fleet, opts: TailOpts) -> Result<()> {
             user,
             password,
             &opts.streams,
-            &where_clause,
+            &opts,
             start_us,
             end_us,
             opts.limit,
@@ -87,13 +86,14 @@ pub async fn run(fleet: &Fleet, opts: TailOpts) -> Result<()> {
                 tasks.push(None);
                 continue;
             }
-            tasks.push(Some(search(
+            let where_clause = build_where(&opts, stream);
+            tasks.push(Some(search_with_where(
                 &client,
                 &base,
                 user,
                 password,
                 stream,
-                &where_clause,
+                where_clause,
                 cursor,
                 end_us,
                 1000,
@@ -137,13 +137,14 @@ async fn fan_out_search(
     user: &str,
     password: &str,
     streams: &[String],
-    where_clause: &str,
+    opts: &TailOpts,
     start_us: u128,
     end_us: u128,
     limit: u32,
 ) -> Result<Vec<(usize, HashMap<String, Value>)>> {
     let futs = streams.iter().map(|stream| {
-        search(
+        let where_clause = build_where(opts, stream);
+        search_with_where(
             client,
             base,
             user,
@@ -166,13 +167,16 @@ async fn fan_out_search(
     Ok(merged)
 }
 
-fn build_where(opts: &TailOpts) -> String {
+fn build_where(opts: &TailOpts, stream: &str) -> String {
     let mut conds = Vec::new();
     if !opts.apps.is_empty() {
         let parts: Vec<String> = opts
             .apps
             .iter()
-            .map(|a| format!("container_name LIKE '{}%'", escape_sql(a)))
+            .map(|a| match stream {
+                "flow_events" => format!("app = '{}'", escape_sql(a)),
+                _ => format!("container_name LIKE '{}%'", escape_sql(a)),
+            })
             .collect();
         conds.push(format!("({})", parts.join(" OR ")));
     }
@@ -199,13 +203,13 @@ fn escape_sql(s: &str) -> String {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn search(
+async fn search_with_where(
     client: &reqwest::Client,
     base: &str,
     user: &str,
     password: &str,
     stream: &str,
-    where_clause: &str,
+    where_clause: String,
     start_us: u128,
     end_us: u128,
     limit: u32,
@@ -359,7 +363,7 @@ mod tests {
             limit: 100,
             follow: false,
         };
-        assert_eq!(build_where(&opts), "");
+        assert_eq!(build_where(&opts, "app_logs"), "");
     }
 
     #[test]
@@ -374,8 +378,12 @@ mod tests {
             follow: false,
         };
         assert_eq!(
-            build_where(&opts),
+            build_where(&opts, "app_logs"),
             " WHERE (container_name LIKE 'paper%' OR container_name LIKE 'auth%') AND (server = 'fl-1') AND level = 'error'"
+        );
+        assert_eq!(
+            build_where(&opts, "flow_events"),
+            " WHERE (app = 'paper' OR app = 'auth') AND (server = 'fl-1') AND level = 'error'"
         );
     }
 
@@ -390,7 +398,10 @@ mod tests {
             limit: 100,
             follow: false,
         };
-        assert_eq!(build_where(&opts), " WHERE (container_name LIKE 'a''b%')");
+        assert_eq!(
+            build_where(&opts, "app_logs"),
+            " WHERE (container_name LIKE 'a''b%')"
+        );
     }
 
     #[test]
