@@ -21,6 +21,16 @@ fn panel_width(spec: Option<&str>) -> i64 {
 }
 
 fn build_panel(id: i64, chart: &Chart, x: i64, y: i64, w: i64) -> Value {
+    let mut fields = json!({
+        "stream": chart.stream,
+        "stream_type": "logs",
+        "x": [{"label": chart.x, "alias": chart.x, "column": chart.x}],
+        "y": [{"label": chart.y, "alias": chart.y, "column": chart.y}],
+        "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
+    });
+    if let Some(b) = &chart.breakdown {
+        fields["breakdown"] = json!([{"label": b, "alias": b, "column": b}]);
+    }
     json!({
         "id": format!("panel-{id}"),
         "type": chart.chart_type,
@@ -31,13 +41,7 @@ fn build_panel(id: i64, chart: &Chart, x: i64, y: i64, w: i64) -> Value {
         "queries": [{
             "query": chart.sql.trim(),
             "customQuery": true,
-            "fields": {
-                "stream": chart.stream,
-                "stream_type": "logs",
-                "x": [{"label": chart.x, "alias": chart.x, "column": chart.x}],
-                "y": [{"label": chart.y, "alias": chart.y, "column": chart.y}],
-                "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
-            },
+            "fields": fields,
             "config": {"promql_legend": ""}
         }],
         "layout": {"x": x, "y": y, "w": w, "h": DEFAULT_HEIGHT, "i": id}
@@ -182,6 +186,7 @@ mod tests {
             y: "n".into(),
             sql: "SELECT 1 AS t, 1 AS n".into(),
             width: width.map(ToString::to_string),
+            breakdown: None,
         }
     }
 

@@ -46,6 +46,7 @@ pub struct Chart {
     pub y: String,
     pub sql: String,
     pub width: Option<String>,
+    pub breakdown: Option<String>,
 }
 
 fn default_chart_type() -> String {
