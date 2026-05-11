@@ -46,6 +46,7 @@ fn build_panel(id: i64, chart: &Chart, x: i64, y: i64, w: i64) -> Value {
     if is_choropleth {
         config["map_view"] = json!({"zoom": 1.5, "lat": 20.0, "lng": 0.0});
         config["base_map"] = json!({"type": "osm"});
+        config["map_type"] = json!({"type": "world"});
     }
 
     json!({
