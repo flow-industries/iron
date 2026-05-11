@@ -45,6 +45,23 @@ if err == null && is_object(parsed) {{
     . = merge(object!(parsed), ., deep: false)
     del(.message)
 }}
+
+if is_integer(.level) {{
+    code = int!(.level)
+    if code >= 60 {{
+        .level = "fatal"
+    }} else if code >= 50 {{
+        .level = "error"
+    }} else if code >= 40 {{
+        .level = "warn"
+    }} else if code >= 30 {{
+        .level = "info"
+    }} else if code >= 20 {{
+        .level = "debug"
+    }} else {{
+        .level = "trace"
+    }}
+}}
 '''
 
 [transforms.drop_noise]
