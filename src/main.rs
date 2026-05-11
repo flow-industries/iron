@@ -92,9 +92,13 @@ async fn main() -> Result<()> {
             since,
             limit,
             follow,
+            sql,
+            streams,
+            schema,
+            json,
         } => {
             let fleet = iron::config::load(&cli.config)?;
-            let streams = if stream.is_empty() {
+            let stream_list = if stream.is_empty() {
                 vec!["app_logs".to_string(), "flow_events".to_string()]
             } else {
                 stream
@@ -105,10 +109,14 @@ async fn main() -> Result<()> {
                     apps: app,
                     servers: server,
                     level,
-                    streams,
+                    streams: stream_list,
                     since,
                     limit,
                     follow,
+                    sql,
+                    list_streams: streams,
+                    schema,
+                    json,
                 },
             )
             .await

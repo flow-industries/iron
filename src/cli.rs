@@ -182,6 +182,22 @@ pub enum Command {
         /// Follow log output (poll continuously)
         #[arg(short, long)]
         follow: bool,
+
+        /// Run a custom SQL query (other filter flags ignored, output is NDJSON)
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
+
+        /// List available streams and exit
+        #[arg(long)]
+        streams: bool,
+
+        /// Show the schema of a stream and exit
+        #[arg(long, value_name = "STREAM")]
+        schema: Option<String>,
+
+        /// Emit each row as NDJSON (one JSON object per line)
+        #[arg(long)]
+        json: bool,
     },
 
     /// Update iron CLI to the latest version (from upstream git by default)

@@ -19,6 +19,10 @@ pub struct TailOpts {
     pub since: String,
     pub limit: u32,
     pub follow: bool,
+    pub sql: Option<String>,
+    pub list_streams: bool,
+    pub schema: Option<String>,
+    pub json: bool,
 }
 
 #[derive(Deserialize)]
@@ -46,13 +50,33 @@ pub async fn run(fleet: &Fleet, opts: TailOpts) -> Result<()> {
         .get("ZO_ROOT_USER_PASSWORD")
         .context("ZO_ROOT_USER_PASSWORD missing in [apps.observe] env")?;
 
+    let base = format!("https://{domain}");
+    let client = reqwest::Client::new();
+
+    if opts.list_streams {
+        return list_streams(&client, &base, user, password).await;
+    }
+    if let Some(stream) = &opts.schema {
+        return show_schema(&client, &base, user, password, stream).await;
+    }
+
+    let lookback_us = parse_duration_us(&opts.since)?;
+
+    if let Some(sql) = &opts.sql {
+        if opts.follow {
+            bail!("--follow is incompatible with --sql");
+        }
+        let end_us = now_us();
+        let start_us = end_us.saturating_sub(lookback_us);
+        return run_sql(
+            &client, &base, user, password, sql, start_us, end_us, opts.limit,
+        )
+        .await;
+    }
+
     if opts.streams.is_empty() {
         bail!("no streams specified");
     }
-
-    let base = format!("https://{domain}");
-    let client = reqwest::Client::new();
-    let lookback_us = parse_duration_us(&opts.since)?;
 
     if !opts.follow {
         let end_us = now_us();
@@ -70,7 +94,7 @@ pub async fn run(fleet: &Fleet, opts: TailOpts) -> Result<()> {
         )
         .await?;
         for (_, h) in &merged {
-            print_hit(h);
+            print_row(h, opts.json);
         }
         return Ok(());
     }
@@ -116,7 +140,7 @@ pub async fn run(fleet: &Fleet, opts: TailOpts) -> Result<()> {
         merged.sort_by_key(|(_, h)| h.get("_timestamp").and_then(Value::as_i64).unwrap_or(0));
 
         for (stream_idx, h) in &merged {
-            print_hit(h);
+            print_row(h, opts.json);
             if let Some(ts) = h.get("_timestamp").and_then(Value::as_i64) {
                 if let Ok(ts_u) = u128::try_from(ts) {
                     if ts_u >= cursors[*stream_idx] {
@@ -348,6 +372,134 @@ fn print_hit(h: &HashMap<String, Value>) {
     );
 }
 
+fn print_row(h: &HashMap<String, Value>, json: bool) {
+    if json {
+        if let Ok(s) = serde_json::to_string(h) {
+            println!("{s}");
+        }
+    } else {
+        print_hit(h);
+    }
+}
+
+#[derive(Deserialize)]
+struct StreamListItem {
+    name: String,
+    #[serde(default)]
+    stream_type: String,
+    #[serde(default)]
+    total_fields: u64,
+}
+
+#[derive(Deserialize)]
+struct StreamListResponse {
+    list: Vec<StreamListItem>,
+}
+
+async fn list_streams(
+    client: &reqwest::Client,
+    base: &str,
+    user: &str,
+    password: &str,
+) -> Result<()> {
+    let resp = client
+        .get(format!("{base}/api/{ORG}/streams?fetchSchema=true"))
+        .basic_auth(user, Some(password))
+        .send()
+        .await?;
+    if !resp.status().is_success() {
+        let s = resp.status();
+        let t = resp.text().await.unwrap_or_default();
+        bail!("list streams: {s} {t}");
+    }
+    let body: StreamListResponse = resp.json().await?;
+    for s in body.list {
+        println!("{}\t{}\t{} fields", s.name, s.stream_type, s.total_fields);
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct SchemaField {
+    name: String,
+    #[serde(default, alias = "type")]
+    field_type: String,
+}
+
+#[derive(Deserialize)]
+struct StreamDetail {
+    #[serde(default)]
+    schema: Vec<SchemaField>,
+}
+
+async fn show_schema(
+    client: &reqwest::Client,
+    base: &str,
+    user: &str,
+    password: &str,
+    stream: &str,
+) -> Result<()> {
+    let resp = client
+        .get(format!(
+            "{base}/api/{ORG}/streams/{stream}/schema?type=logs"
+        ))
+        .basic_auth(user, Some(password))
+        .send()
+        .await?;
+    if !resp.status().is_success() {
+        let s = resp.status();
+        let t = resp.text().await.unwrap_or_default();
+        bail!("schema {stream}: {s} {t}");
+    }
+    let body: StreamDetail = resp.json().await?;
+    let mut fields = body.schema;
+    fields.sort_by(|a, b| a.name.cmp(&b.name));
+    for f in fields {
+        println!("{}\t{}", f.name, f.field_type);
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_sql(
+    client: &reqwest::Client,
+    base: &str,
+    user: &str,
+    password: &str,
+    sql: &str,
+    start_us: u128,
+    end_us: u128,
+    limit: u32,
+) -> Result<()> {
+    let payload = json!({
+        "query": {
+            "sql": sql,
+            "start_time": i64::try_from(start_us).unwrap_or(0),
+            "end_time": i64::try_from(end_us).unwrap_or(i64::MAX),
+            "from": 0,
+            "size": limit,
+        }
+    });
+    let resp = client
+        .post(format!("{base}/api/{ORG}/_search?type=logs"))
+        .basic_auth(user, Some(password))
+        .json(&payload)
+        .send()
+        .await?;
+    let status = resp.status();
+    if !status.is_success() {
+        let t = resp.text().await.unwrap_or_default();
+        bail!("sql query failed: {status} {t}");
+    }
+    let body: SearchResponse = resp.json().await?;
+    for h in body.hits {
+        if let Ok(s) = serde_json::to_string(&h) {
+            println!("{s}");
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,6 +514,10 @@ mod tests {
             since: "5m".into(),
             limit: 100,
             follow: false,
+            sql: None,
+            list_streams: false,
+            schema: None,
+            json: false,
         };
         assert_eq!(build_where(&opts, "app_logs"), "");
     }
@@ -376,6 +532,10 @@ mod tests {
             since: "5m".into(),
             limit: 100,
             follow: false,
+            sql: None,
+            list_streams: false,
+            schema: None,
+            json: false,
         };
         assert_eq!(
             build_where(&opts, "app_logs"),
@@ -397,6 +557,10 @@ mod tests {
             since: "5m".into(),
             limit: 100,
             follow: false,
+            sql: None,
+            list_streams: false,
+            schema: None,
+            json: false,
         };
         assert_eq!(
             build_where(&opts, "app_logs"),
