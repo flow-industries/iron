@@ -11,6 +11,17 @@ const DISCORD_TEMPLATE_BODY: &str = r#"{"embeds":"{rows}"}"#;
 const DISCORD_ROW_TEMPLATE: &str = r#"{"author":{"name":"{app}"},"title":"{action}","description":"{msg}","color":{color},"footer":{"text":"{server}"}}"#;
 const TELEGRAM_ROW_TEMPLATE: &str = "<b>{app}</b> · {action}\n<i>{server}</i>{msg}";
 
+const GEOIP_FN_NAME: &str = "geoip_enrich";
+const GEOIP_FN_BODY: &str = r#"record, _ = get_enrichment_table_record("maxmind_city", {"ip": to_string(.ip) ?? ""})
+if is_object(record) {
+  obj = object!(record)
+  .country_code = obj.country_code
+  .country_name = obj.country_name
+}
+."#;
+const GEOIP_PIPELINE_NAME: &str = "rum_geoip";
+const RUM_STREAM: &str = "_rumdata";
+
 #[derive(Debug, Clone)]
 pub struct SyncInput<'a> {
     pub hub_url: &'a str,
@@ -101,9 +112,163 @@ pub async fn sync(input: &SyncInput<'_>) -> Result<SyncOutput> {
         .await?;
     }
 
+    ensure_function(
+        &client,
+        base,
+        input.user,
+        input.password,
+        GEOIP_FN_NAME,
+        GEOIP_FN_BODY,
+    )
+    .await?;
+    ensure_geoip_pipeline(&client, base, input.user, input.password).await?;
+
     let rum_token = fetch_rum_token(&client, base, input.user, input.password).await?;
 
     Ok(SyncOutput { rum_token })
+}
+
+async fn ensure_function(
+    client: &reqwest::Client,
+    base: &str,
+    user: &str,
+    password: &str,
+    name: &str,
+    body: &str,
+) -> Result<()> {
+    let payload = json!({
+        "name": name,
+        "function": body,
+        "params": "row",
+        "transType": 0,
+    });
+    let exists = client
+        .get(format!("{base}/api/{ORG}/functions/{name}"))
+        .basic_auth(user, Some(password))
+        .send()
+        .await?
+        .status()
+        .is_success();
+
+    let resp = if exists {
+        client
+            .put(format!("{base}/api/{ORG}/functions/{name}"))
+            .basic_auth(user, Some(password))
+            .json(&payload)
+            .send()
+            .await?
+    } else {
+        client
+            .post(format!("{base}/api/{ORG}/functions"))
+            .basic_auth(user, Some(password))
+            .json(&payload)
+            .send()
+            .await?
+    };
+    if !resp.status().is_success() {
+        let s = resp.status();
+        let t = resp.text().await.unwrap_or_default();
+        bail!("function {name}: {s} {t}");
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct PipelineSummary {
+    #[serde(default, alias = "pipeline_id", alias = "id")]
+    id: Option<String>,
+    #[serde(default)]
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct PipelineList {
+    list: Vec<PipelineSummary>,
+}
+
+async fn ensure_geoip_pipeline(
+    client: &reqwest::Client,
+    base: &str,
+    user: &str,
+    password: &str,
+) -> Result<()> {
+    let body = json!({
+        "name": GEOIP_PIPELINE_NAME,
+        "description": "Enrich _rumdata with country from ip",
+        "source": {
+            "source_type": "realtime",
+            "stream_type": "logs",
+            "stream_name": RUM_STREAM,
+            "org_id": ORG,
+        },
+        "nodes": [
+            {
+                "id": "src",
+                "type": "input",
+                "data": {"node_type": "stream", "stream_type": "logs", "stream_name": RUM_STREAM, "org_id": ORG},
+                "position": {"x": 0, "y": 0},
+                "io_type": "input",
+            },
+            {
+                "id": "fn1",
+                "type": "default",
+                "data": {"node_type": "function", "name": GEOIP_FN_NAME, "after_flatten": false, "num_args": 0},
+                "position": {"x": 100, "y": 0},
+                "io_type": "default",
+            },
+            {
+                "id": "dst",
+                "type": "output",
+                "data": {"node_type": "stream", "stream_type": "logs", "stream_name": RUM_STREAM, "org_id": ORG},
+                "position": {"x": 200, "y": 0},
+                "io_type": "output",
+            },
+        ],
+        "edges": [
+            {"id": "e1", "source": "src", "target": "fn1"},
+            {"id": "e2", "source": "fn1", "target": "dst"},
+        ],
+    });
+
+    let list: PipelineList = client
+        .get(format!("{base}/api/{ORG}/pipelines"))
+        .basic_auth(user, Some(password))
+        .send()
+        .await?
+        .json()
+        .await
+        .with_context(|| "list pipelines")?;
+
+    let existing = list
+        .list
+        .into_iter()
+        .find(|p| p.name == GEOIP_PIPELINE_NAME);
+
+    let resp = if let Some(p) = existing {
+        let mut updated = body.clone();
+        if let Some(id) = p.id.as_deref() {
+            updated["pipeline_id"] = json!(id);
+        }
+        client
+            .put(format!("{base}/api/{ORG}/pipelines"))
+            .basic_auth(user, Some(password))
+            .json(&updated)
+            .send()
+            .await?
+    } else {
+        client
+            .post(format!("{base}/api/{ORG}/pipelines"))
+            .basic_auth(user, Some(password))
+            .json(&body)
+            .send()
+            .await?
+    };
+    if !resp.status().is_success() {
+        let s = resp.status();
+        let t = resp.text().await.unwrap_or_default();
+        bail!("pipeline {GEOIP_PIPELINE_NAME}: {s} {t}");
+    }
+    Ok(())
 }
 
 async fn wait_until_ready(
