@@ -21,22 +21,39 @@ fn panel_width(spec: Option<&str>) -> i64 {
 }
 
 fn build_panel(id: i64, chart: &Chart, x: i64, y: i64, w: i64) -> Value {
+    let is_choropleth = chart.chart_type == "maps";
+
     let mut fields = json!({
         "stream": chart.stream,
         "stream_type": "logs",
-        "x": [{"label": chart.x, "alias": chart.x, "column": chart.x}],
-        "y": [{"label": chart.y, "alias": chart.y, "column": chart.y}],
+        "x": [],
+        "y": [],
         "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
     });
+
+    if is_choropleth {
+        fields["name"] = json!({"label": chart.x, "alias": chart.x, "column": chart.x});
+        fields["value_for_maps"] = json!({"label": chart.y, "alias": chart.y, "column": chart.y});
+    } else {
+        fields["x"] = json!([{"label": chart.x, "alias": chart.x, "column": chart.x}]);
+        fields["y"] = json!([{"label": chart.y, "alias": chart.y, "column": chart.y}]);
+    }
     if let Some(b) = &chart.breakdown {
         fields["breakdown"] = json!([{"label": b, "alias": b, "column": b}]);
     }
+
+    let mut config = json!({"show_legends": true, "decimals": 0});
+    if is_choropleth {
+        config["map_view"] = json!({"zoom": 1.5, "lat": 20.0, "lng": 0.0});
+        config["base_map"] = json!({"type": "osm"});
+    }
+
     json!({
         "id": format!("panel-{id}"),
         "type": chart.chart_type,
         "title": chart.title,
         "description": "",
-        "config": {"show_legends": true, "decimals": 0},
+        "config": config,
         "queryType": "sql",
         "queries": [{
             "query": chart.sql.trim(),
