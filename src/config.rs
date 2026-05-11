@@ -19,6 +19,40 @@ pub struct FleetConfig {
     pub webhook: Option<WebhookConfig>,
 }
 
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct ChartsConfig {
+    #[serde(default)]
+    pub chart: Vec<Chart>,
+    #[serde(default)]
+    pub apps: HashMap<String, AppCharts>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct AppCharts {
+    #[serde(default)]
+    pub chart: Vec<Chart>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct Chart {
+    pub title: String,
+    #[serde(rename = "type", default = "default_chart_type")]
+    pub chart_type: String,
+    pub stream: String,
+    pub x: String,
+    pub y: String,
+    pub sql: String,
+    pub width: Option<String>,
+    pub breakdown: Option<String>,
+}
+
+fn default_chart_type() -> String {
+    "bar".to_string()
+}
+
 #[derive(Debug, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct WebhookConfig {
@@ -177,6 +211,7 @@ pub struct Fleet {
     pub runners: HashMap<String, Runner>,
     pub secrets: FleetSecrets,
     pub webhook: Option<WebhookConfig>,
+    pub charts: Vec<Chart>,
 }
 
 impl Fleet {
@@ -204,6 +239,7 @@ pub struct ResolvedApp {
     pub ports: Vec<PortMapping>,
     pub r2_buckets: Vec<R2Bucket>,
     pub volumes: Vec<String>,
+    pub charts: Vec<Chart>,
 }
 
 #[derive(Debug, Clone)]
@@ -441,6 +477,16 @@ pub fn load(config_path: &str) -> Result<Fleet> {
         EnvConfig::default()
     };
 
+    let charts_path = config_path.with_file_name("fleet.charts.toml");
+    let charts_config: ChartsConfig = if charts_path.exists() {
+        let charts_content = std::fs::read_to_string(&charts_path)
+            .with_context(|| format!("Failed to read {}", charts_path.display()))?;
+        toml::from_str(&charts_content)
+            .with_context(|| format!("Failed to parse {}", charts_path.display()))?
+    } else {
+        ChartsConfig::default()
+    };
+
     for (app_name, app) in &config.apps {
         for server in &app.servers {
             if !config.servers.contains_key(server) {
@@ -486,6 +532,12 @@ pub fn load(config_path: &str) -> Result<Fleet> {
             })
             .collect();
 
+        let app_charts = charts_config
+            .apps
+            .get(&name)
+            .map(|c| c.chart.clone())
+            .unwrap_or_default();
+
         resolved_apps.insert(
             name.clone(),
             ResolvedApp {
@@ -500,6 +552,7 @@ pub fn load(config_path: &str) -> Result<Fleet> {
                 ports: app.ports,
                 r2_buckets: app.r2_buckets,
                 volumes: app.volumes,
+                charts: app_charts,
             },
         );
     }
@@ -512,5 +565,6 @@ pub fn load(config_path: &str) -> Result<Fleet> {
         runners: config.runners,
         secrets: env_config.fleet,
         webhook: config.webhook,
+        charts: charts_config.chart,
     })
 }

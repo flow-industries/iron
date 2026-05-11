@@ -219,6 +219,19 @@ async fn sync_observability(config_path: &str, fleet: &Fleet, app: &ResolvedApp)
     .await?;
     sp.finish_and_clear();
 
+    let dashboard_client = reqwest::Client::new();
+    let chart_count =
+        fleet.charts.len() + fleet.apps.values().map(|a| a.charts.len()).sum::<usize>();
+    if chart_count > 0 {
+        let sp = ui::spinner("  Syncing dashboard...");
+        crate::dashboard::sync(&dashboard_client, &hub_url, user, password, fleet).await?;
+        sp.finish_and_clear();
+        ui::success(&format!(
+            "  Dashboard synced ({chart_count} chart{})",
+            if chart_count == 1 { "" } else { "s" }
+        ));
+    }
+
     let mut details = Vec::new();
     if fleet
         .secrets

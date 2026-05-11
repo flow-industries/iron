@@ -7,6 +7,7 @@ pub mod cli;
 pub mod cloudflare;
 pub mod compose;
 pub mod config;
+pub mod dashboard;
 pub mod db;
 pub mod deploy;
 pub mod env;

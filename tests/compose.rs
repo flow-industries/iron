@@ -20,6 +20,7 @@ fn simple_app() -> ResolvedApp {
         ports: vec![],
         r2_buckets: vec![],
         volumes: vec![],
+        charts: vec![],
     }
 }
 
@@ -61,6 +62,7 @@ fn generate_with_ports() {
         }],
         r2_buckets: vec![],
         volumes: vec![],
+        charts: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("\"9999:9999\""));
@@ -102,6 +104,7 @@ fn generate_with_sidecars() {
         ports: vec![],
         r2_buckets: vec![],
         volumes: vec![],
+        charts: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("postgres:"));
@@ -145,6 +148,7 @@ fn generate_env_file() {
         ports: vec![],
         r2_buckets: vec![],
         volumes: vec![],
+        charts: vec![],
     };
     let env = generate_env(&app);
     assert!(env.contains("DB_PASSWORD=secret123"));
@@ -187,6 +191,7 @@ fn compose_uses_env_file_not_shell_interpolation() {
         ports: vec![],
         r2_buckets: vec![],
         volumes: vec![],
+        charts: vec![],
     };
     let output = generate(&app, "flow");
     assert!(output.contains("env_file:\n      - .env"));
