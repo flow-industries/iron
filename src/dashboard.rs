@@ -36,7 +36,7 @@ fn build_panel(id: i64, chart: &Chart, x: i64, y: i64, w: i64) -> Value {
         "type": chart.chart_type,
         "title": chart.title,
         "description": "",
-        "config": {"show_legends": true},
+        "config": {"show_legends": true, "decimals": 0},
         "queryType": "sql",
         "queries": [{
             "query": chart.sql.trim(),
