@@ -58,6 +58,8 @@ pub fn build_autoremove_cmd(dry_run: bool) -> String {
     format!("DEBIAN_FRONTEND=noninteractive apt-get{dry} autoremove -y")
 }
 
+const DOCKER_DAEMON_PACKAGES: &[&str] = &["docker-ce", "containerd.io"];
+
 pub async fn run(fleet: &Fleet, opts: UpgradeOpts, notifier: &Notifier) -> Result<()> {
     let servers: Vec<(String, crate::config::Server)> = if let Some(ref name) = opts.server {
         let server = fleet
@@ -138,6 +140,7 @@ async fn upgrade_one(
     }
 
     let pre_count = count_upgradable(&session).await.unwrap_or(0);
+    let pre_docker_versions = read_package_versions(&session, DOCKER_DAEMON_PACKAGES).await;
 
     let code = stream_command(&session, &build_upgrade_cmd(opts.mode, opts.dry_run)).await?;
     if code != 0 {
@@ -157,6 +160,24 @@ async fn upgrade_one(
         sp.finish_and_clear();
         if code != 0 {
             bail!("apt-get autoremove exited with status {code}");
+        }
+    }
+
+    if !opts.dry_run {
+        let post_docker_versions = read_package_versions(&session, DOCKER_DAEMON_PACKAGES).await;
+        let changed = docker_packages_changed(&pre_docker_versions, &post_docker_versions);
+        if !changed.is_empty() {
+            ui::header(&format!(
+                "{name}: {} upgraded — restarting docker to re-assert iptables",
+                changed.join(", ")
+            ));
+            let sp = ui::spinner(&format!("{name} → systemctl restart docker"));
+            let code = stream_command(&session, "systemctl restart docker").await?;
+            sp.finish_and_clear();
+            if code != 0 {
+                bail!("systemctl restart docker exited with status {code}");
+            }
+            ui::success(&format!("{name} → docker restarted"));
         }
     }
 
@@ -208,6 +229,39 @@ async fn count_upgradable(session: &openssh::Session) -> Result<usize> {
     text.trim()
         .parse()
         .context("failed to parse upgradable count")
+}
+
+async fn read_package_versions(
+    session: &openssh::Session,
+    packages: &[&str],
+) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    for pkg in packages {
+        let cmd = format!("dpkg-query -W -f='${{Version}}' {pkg} 2>/dev/null || true");
+        let Ok(output) = session.command("sh").arg("-c").arg(&cmd).output().await else {
+            continue;
+        };
+        let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !version.is_empty() {
+            out.insert((*pkg).to_string(), version);
+        }
+    }
+    out
+}
+
+pub fn docker_packages_changed<S: std::hash::BuildHasher>(
+    before: &std::collections::HashMap<String, String, S>,
+    after: &std::collections::HashMap<String, String, S>,
+) -> Vec<String> {
+    let mut changed: Vec<String> = Vec::new();
+    for (pkg, after_ver) in after {
+        match before.get(pkg) {
+            Some(before_ver) if before_ver == after_ver => {}
+            _ => changed.push(pkg.clone()),
+        }
+    }
+    changed.sort();
+    changed
 }
 
 async fn check_reboot_required(session: &openssh::Session) -> Result<bool> {

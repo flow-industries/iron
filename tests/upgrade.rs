@@ -2,7 +2,10 @@
 
 use clap::Parser;
 use iron::cli::{Cli, Command};
-use iron::upgrade::{UpgradeMode, build_autoremove_cmd, build_upgrade_cmd};
+use iron::upgrade::{
+    UpgradeMode, build_autoremove_cmd, build_upgrade_cmd, docker_packages_changed,
+};
+use std::collections::HashMap;
 
 #[test]
 fn standard_upgrade_uses_apt_get_upgrade() {
@@ -159,4 +162,57 @@ fn upgrade_mode_labels() {
     assert_eq!(UpgradeMode::SecurityOnly.as_str(), "security-only");
     assert_eq!(UpgradeMode::Standard.as_str(), "standard");
     assert_eq!(UpgradeMode::Full.as_str(), "full");
+}
+
+fn versions(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+    pairs
+        .iter()
+        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+        .collect()
+}
+
+#[test]
+fn docker_changed_returns_empty_when_versions_match() {
+    let before = versions(&[("docker-ce", "29.3.0-1"), ("containerd.io", "2.2.1-1")]);
+    let after = versions(&[("docker-ce", "29.3.0-1"), ("containerd.io", "2.2.1-1")]);
+    assert!(docker_packages_changed(&before, &after).is_empty());
+}
+
+#[test]
+fn docker_changed_detects_version_bump() {
+    let before = versions(&[("docker-ce", "29.3.0-1"), ("containerd.io", "2.2.1-1")]);
+    let after = versions(&[("docker-ce", "29.4.3-1"), ("containerd.io", "2.2.1-1")]);
+    assert_eq!(
+        docker_packages_changed(&before, &after),
+        vec!["docker-ce".to_string()]
+    );
+}
+
+#[test]
+fn docker_changed_detects_both_packages() {
+    let before = versions(&[("docker-ce", "29.3.0-1"), ("containerd.io", "2.2.1-1")]);
+    let after = versions(&[("docker-ce", "29.4.3-1"), ("containerd.io", "2.2.3-1")]);
+    let mut result = docker_packages_changed(&before, &after);
+    result.sort();
+    assert_eq!(
+        result,
+        vec!["containerd.io".to_string(), "docker-ce".to_string()]
+    );
+}
+
+#[test]
+fn docker_changed_detects_newly_installed_package() {
+    let before = versions(&[]);
+    let after = versions(&[("docker-ce", "29.4.3-1")]);
+    assert_eq!(
+        docker_packages_changed(&before, &after),
+        vec!["docker-ce".to_string()]
+    );
+}
+
+#[test]
+fn docker_changed_ignores_removed_package() {
+    let before = versions(&[("docker-ce", "29.3.0-1")]);
+    let after = versions(&[]);
+    assert!(docker_packages_changed(&before, &after).is_empty());
 }
