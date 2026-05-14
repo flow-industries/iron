@@ -121,6 +121,38 @@ async fn main() -> Result<()> {
             )
             .await
         }
+        Command::Upgrade {
+            server,
+            security_only,
+            full,
+            reboot_if_required,
+            dry_run,
+            autoremove,
+            yes,
+        } => {
+            let fleet = iron::config::load(&cli.config)?;
+            let notifier = iron::notify::Notifier::from_secrets(&fleet.secrets);
+            let mode = if security_only {
+                iron::upgrade::UpgradeMode::SecurityOnly
+            } else if full {
+                iron::upgrade::UpgradeMode::Full
+            } else {
+                iron::upgrade::UpgradeMode::Standard
+            };
+            iron::upgrade::run(
+                &fleet,
+                iron::upgrade::UpgradeOpts {
+                    server,
+                    mode,
+                    reboot_if_required,
+                    dry_run,
+                    autoremove,
+                    yes,
+                },
+                &notifier,
+            )
+            .await
+        }
         Command::Update { crates, git_url } => iron::update::run(crates, git_url.as_deref()).await,
         Command::Version => iron::version::run(&cli.config).await,
     }

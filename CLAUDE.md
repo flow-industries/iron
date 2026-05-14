@@ -74,6 +74,14 @@ iron server remove fl-1
 iron server check
 iron server check fl-1
 
+# Patch server packages (SSH-as-root, sequential across the fleet)
+iron upgrade                        # apt-get upgrade -y on every server
+iron upgrade --server fl-1          # only fl-1
+iron upgrade --security-only        # force-run the nightly unattended-upgrades job now
+iron upgrade --full --yes           # dist-upgrade (kernel + new deps), skip prompt
+iron upgrade --dry-run              # show what would change, no writes
+iron upgrade --autoremove --reboot-if-required
+
 # Runner management (modifies fleet.toml only, run iron deploy afterward)
 iron runner add ci --server fl-1 --scope org --target flow-industries --label linux
 iron runner add                    # interactive wizard

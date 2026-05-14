@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use openssh::{KnownHosts, Session, Stdio};
 use std::collections::HashMap;
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::config::Server;
 
@@ -113,4 +114,45 @@ impl SshPool {
 
 pub fn build_upload_cmd(remote_path: &str, content: &str) -> String {
     format!("cat > {remote_path} <<'FLOW_EOF'\n{content}\nFLOW_EOF")
+}
+
+pub async fn connect_root(name: &str, server: &Server) -> Result<Session> {
+    let ssh_target = server.ip.as_deref().unwrap_or(&server.host);
+    let dest = format!("ssh://root@{ssh_target}");
+    Session::connect(&dest, KnownHosts::Strict)
+        .await
+        .with_context(|| format!("Failed to connect to {name} as root"))
+}
+
+pub async fn stream_command(session: &Session, cmd: &str) -> Result<i32> {
+    let mut child = session
+        .command("sh")
+        .arg("-c")
+        .arg(cmd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .await
+        .context("Failed to spawn remote command")?;
+
+    let stdout = child.stdout().take().context("missing stdout pipe")?;
+    let stderr = child.stderr().take().context("missing stderr pipe")?;
+
+    let pump_stdout = async {
+        let mut reader = BufReader::new(stdout).lines();
+        while let Ok(Some(line)) = reader.next_line().await {
+            println!("{line}");
+        }
+    };
+    let pump_stderr = async {
+        let mut reader = BufReader::new(stderr).lines();
+        while let Ok(Some(line)) = reader.next_line().await {
+            eprintln!("{line}");
+        }
+    };
+    let wait = child.wait();
+
+    let ((), (), status) = tokio::join!(pump_stdout, pump_stderr, wait);
+    let status = status.context("Failed waiting for remote command")?;
+    Ok(status.code().unwrap_or(-1))
 }

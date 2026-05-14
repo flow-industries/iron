@@ -200,6 +200,37 @@ pub enum Command {
         json: bool,
     },
 
+    /// Run package updates on every server (default: `apt-get upgrade -y`)
+    Upgrade {
+        /// Run only on this server (defaults to all servers)
+        #[arg(long)]
+        server: Option<String>,
+
+        /// Apply only security-pocket updates (force-runs the nightly unattended-upgrades job)
+        #[arg(long, conflicts_with = "full")]
+        security_only: bool,
+
+        /// Run dist-upgrade instead of upgrade (kernel, new dependencies, removals)
+        #[arg(long, conflicts_with = "security_only")]
+        full: bool,
+
+        /// Reboot the server at the end if /var/run/reboot-required is set
+        #[arg(long)]
+        reboot_if_required: bool,
+
+        /// Simulate the upgrade without applying anything
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Also run `apt-get autoremove -y` after the upgrade
+        #[arg(long)]
+        autoremove: bool,
+
+        /// Skip the interactive confirmation prompt (auto-confirms --full)
+        #[arg(short, long)]
+        yes: bool,
+    },
+
     /// Update iron CLI to the latest version (from upstream git by default)
     Update {
         /// Install from crates.io instead of git (lags behind upstream main)

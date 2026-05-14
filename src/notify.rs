@@ -158,6 +158,28 @@ impl Event {
             msg: String::new(),
         }
     }
+
+    pub fn upgrade_completed(server: &str, mode: &str, packages_changed: usize) -> Self {
+        Self {
+            level: EventLevel::Success,
+            source: "iron",
+            app: "infra".into(),
+            action: "Packages upgraded".into(),
+            server: server.into(),
+            msg: format!("{mode}: {packages_changed} package(s) changed"),
+        }
+    }
+
+    pub fn upgrade_failed(server: &str, mode: &str, error: &str) -> Self {
+        Self {
+            level: EventLevel::Failure,
+            source: "iron",
+            app: "infra".into(),
+            action: "Upgrade failed".into(),
+            server: server.into(),
+            msg: format!("{mode}: {error}"),
+        }
+    }
 }
 
 pub struct Notifier {

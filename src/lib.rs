@@ -30,5 +30,6 @@ pub mod tail;
 pub mod tail_agent;
 pub mod ui;
 pub mod update;
+pub mod upgrade;
 pub mod version;
 pub mod webhook;
