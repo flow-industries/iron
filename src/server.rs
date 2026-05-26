@@ -304,6 +304,24 @@ notify() {
   fi
 }
 
+pull_with_retry() {
+  pull_image="$1"
+  pull_attempts=3
+  pull_i=1
+  while [ "$pull_i" -le "$pull_attempts" ]; do
+    if pull_err=$(timeout "$PULL_TIMEOUT" docker pull "$pull_image" -q 2>&1); then
+      return 0
+    fi
+    if [ "$pull_i" -lt "$pull_attempts" ]; then
+      if [ "$pull_i" -eq 1 ]; then pull_delay=5; else pull_delay=15; fi
+      log "WARN: pull attempt ${pull_i}/${pull_attempts} failed for ${pull_image}: ${pull_err}; retrying in ${pull_delay}s"
+      sleep "$pull_delay"
+    fi
+    pull_i=$((pull_i + 1))
+  done
+  return 1
+}
+
 if [ -n "${IRON_TAIL_URL:-}" ] && ! command -v curl > /dev/null 2>&1; then
   apt-get update -qq > /dev/null 2>&1 && apt-get install -y -qq curl > /dev/null 2>&1
 fi
@@ -333,9 +351,9 @@ while true; do
 
     local_id=$(docker inspect "$container" --format "{{.Image}}" 2>/dev/null) || continue
 
-    if ! pull_err=$(timeout "$PULL_TIMEOUT" docker pull "$image" -q 2>&1); then
-      log "ERROR: pull failed (${PULL_TIMEOUT}s timeout) for ${image}: ${pull_err}"
-      notify "failure" "${project}" "Pull failed" "${pull_err}"
+    if ! pull_with_retry "$image"; then
+      log "ERROR: pull failed after 3 attempts (${PULL_TIMEOUT}s each) for ${image}: ${pull_err}"
+      notify "failure" "${project}" "Pull failed" "after 3 attempts: ${pull_err}"
       continue
     fi
 
